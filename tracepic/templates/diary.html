@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}일기 · TracePic{% endblock %}
+{% block main_class %}diary-main{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/diary.css') }}">
+{# 읽기 창의 '그날 동선' 지도 — 지도 화면과 같은 버전·SRI #}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
+{% endblock %}
+
+{% block content %}
+{# 무대: 기록 카드가 원형으로 늘어선 3D 링. 드래그·휠·키보드로 회전한다 #}
+<section id="stage" class="stage" tabindex="0"
+         aria-label="일기 카드. 좌우 화살표로 넘기고 Enter 로 엽니다. N 키로 새 기록을 씁니다.">
+  <div id="tilt" class="ring-tilt">
+    <div id="ring" class="ring"></div>
+  </div>
+</section>
+
+{# 위쪽: 연도 선택, 새 기록 #}
+<div class="hud hud-top">
+  <label class="year-pick">
+    <span class="sr-only">연도</span>
+    <select id="year"></select>
+  </label>
+  <div class="hud-actions">
+    <button type="button" id="search-btn" class="hud-btn" aria-label="검색 ( / )" title="검색 ( / )">🔍 검색</button>
+    <button type="button" id="new-btn" class="hud-btn hud-btn-primary">＋ 새 기록</button>
+  </div>
+</div>
+
+{# 아래쪽: 앞에 선 카드 정보 + 넘기기 #}
+<div class="hud hud-bottom">
+  <div id="caption" class="caption" aria-live="polite">
+    <div id="cap-date" class="cap-date"></div>
+    <div id="cap-title" class="cap-title"></div>
+  </div>
+  <div class="nav-row">
+    <button type="button" id="prev-btn" class="hud-btn round" aria-label="이전 기록">‹</button>
+    <button type="button" id="open-btn" class="hud-btn">읽기</button>
+    <button type="button" id="next-btn" class="hud-btn round" aria-label="다음 기록">›</button>
+  </div>
+  <input id="scrub" class="scrub" type="range" min="0" max="0" value="0" aria-label="기록 빠르게 넘기기">
+  <p class="hint">드래그 · 휠 · ← → 로 넘기기 &nbsp;·&nbsp; 가운데 카드를 누르면 열립니다</p>
+</div>
+
+{# 기록이 없을 때 #}
+<div id="empty" class="empty" hidden>
+  <p class="empty-title">아직 이 해의 기록이 없습니다</p>
+  <button type="button" id="empty-new" class="hud-btn hud-btn-primary">첫 기록 쓰기</button>
+</div>
+
+{# 읽기 #}
+<dialog id="reader" class="sheet reader" aria-labelledby="r-title">
+  <header class="sheet-head">
+    <div>
+      <div id="r-date" class="sheet-date"></div>
+      <h2 id="r-title" class="sheet-title"></h2>
+    </div>
+    <button type="button" class="icon-btn" data-close aria-label="닫기">×</button>
+  </header>
+  <div class="r-main">
+    <article id="r-body" class="md-body" tabindex="-1"></article>
+    {# 오른쪽(모바일은 아래): 그날 동선 지도 + 사진 줄 — 그날 사진이 없으면 숨김 #}
+    <aside id="r-side" class="r-side" aria-label="이날의 동선과 사진" hidden>
+      <h3>이날의 동선</h3>
+      <div id="r-map" class="r-map"></div>
+      <p id="r-nomap" class="muted small" hidden>위치가 있는 사진이 없어 지도는 생략했습니다.</p>
+      <div id="r-photos" class="photo-strip" role="list"></div>
+      <a id="r-maplink" class="r-maplink" href="#">지도에서 크게 보기 →</a>
+    </aside>
+  </div>
+  <footer class="sheet-foot">
+    <span id="r-updated" class="muted small"></span>
+    <div class="foot-actions">
+      <button type="button" id="r-delete" class="text-btn danger">삭제</button>
+      <button type="button" id="r-edit" class="btn-small">수정</button>
+    </div>
+  </footer>
+</dialog>
+
+{# 쓰기 / 고치기 #}
+<dialog id="editor" class="sheet editor" aria-labelledby="e-heading">
+  <form id="e-form" novalidate>
+    <header class="sheet-head">
+      <h2 id="e-heading" class="sheet-title">새 기록</h2>
+      <button type="button" class="icon-btn" data-close aria-label="닫기">×</button>
+    </header>
+    <div class="e-fields">
+      <input id="e-date" type="date" required aria-label="날짜">
+      <input id="e-title" type="text" maxlength="255" placeholder="제목 (선택)" aria-label="제목">
+    </div>
+    <p id="e-notice" class="e-notice" hidden></p>
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" id="tab-write" class="tab is-on" aria-selected="true">쓰기</button>
+      <button type="button" role="tab" id="tab-preview" class="tab" aria-selected="false">미리보기</button>
+      <span class="muted small tab-help">마크다운 사용 가능 · Ctrl+S 저장</span>
+    </div>
+    <textarea id="e-note" class="e-note" placeholder="오늘은 어땠나요?&#10;&#10;# 제목, **굵게**, - 목록, - [ ] 할 일 처럼 마크다운으로 쓸 수 있습니다."></textarea>
+    <article id="e-preview" class="md-body e-preview" hidden></article>
+    <p id="e-error" class="alert alert-error" role="alert" hidden></p>
+    <footer class="sheet-foot">
+      <span id="e-count" class="muted small"></span>
+      <div class="foot-actions">
+        <button type="button" class="text-btn" data-close>취소</button>
+        <button type="submit" class="btn-small" id="e-save">저장</button>
+      </div>
+    </footer>
+  </form>
+</dialog>
+
+{# 검색: 일기·사진 설명의 제목/본문 #}
+<dialog id="search" class="sheet search" aria-labelledby="s-heading">
+  <header class="sheet-head">
+    <h2 id="s-heading" class="sheet-title">검색</h2>
+    <button type="button" class="icon-btn" data-close aria-label="닫기">×</button>
+  </header>
+  <form id="s-form" class="s-form" role="search">
+    <input id="s-input" type="search" maxlength="100" placeholder="일기·사진 설명에서 찾기 (예: 성산, 전복죽)" aria-label="검색어" autocomplete="off">
+    <button type="submit" class="btn-small">찾기</button>
+  </form>
+  <div id="s-results" class="s-results" aria-live="polite">
+    <p class="muted small">제목과 본문에서 찾습니다. 대소문자는 구분하지 않습니다.</p>
+  </div>
+</dialog>
+
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script id="diary-config" type="application/json">
+  {{ {"apiUrl": url_for("api.diary_list"), "previewUrl": url_for("api.diary_preview"),
+       "searchUrl": url_for("api.search"), "storyPage": url_for("main.story")}|tojson }}
+</script>
+<script src="{{ url_for('static', filename='js/dayview.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/diary.js') }}" defer></script>
+{% endblock %}

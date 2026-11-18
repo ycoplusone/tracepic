@@ -1,0 +1,19 @@
+# ── 웹 프레임워크 ──────────────────────────────
+Flask>=3.1,<4.0
+python-dotenv>=1.0,<2.0          # .env 환경 변수 로딩
+
+# ── 데이터베이스 (MySQL) ───────────────────────
+PyMySQL>=1.1,<2.0                # 순수 파이썬 MySQL 드라이버 (ORM 미사용, SQL 직접 작성)
+cryptography>=44.0               # 이미지 암호화(Fernet/HKDF) + MySQL 8 caching_sha2 인증에도 필요
+bcrypt>=4.2                      # user_info.password 가 bcrypt 해시일 때 검증용
+
+# ── 이미지 처리 ────────────────────────────────
+Pillow>=11.3                     # 리사이징, EXIF 읽기 (Python 3.14 휠 지원 버전)
+pillow-heif>=1.0                 # 아이폰 HEIC 사진 열기 (없으면 HEIC 업로드만 거부됨)
+
+# ── 마크다운 여행 기록 ──────────────────────────
+Markdown>=3.7,<4.0               # md → HTML 변환
+nh3>=0.2.18                      # 변환된 HTML XSS 살균(sanitize)
+
+# ── 운영 배포 (Oracle Cloud Linux) ─────────────
+gunicorn>=23.0                   # WSGI 서버 (Nginx 리버스 프록시 뒤에서 실행)

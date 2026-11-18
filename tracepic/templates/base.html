@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">  {# fetch/XHR 요청용 CSRF 토큰 #}
+  <title>{% block title %}TracePic{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  {% if g.user %}
+  <!-- 로그인 상태일 때만 상단 바 표시 -->
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('main.index') }}">TracePic</a>
+    <div class="topbar-right">
+      <a class="nav-link" href="{{ url_for('main.index') }}">지도</a>
+      <a class="nav-link" href="{{ url_for('diary.index') }}">일기</a>
+      <a class="nav-link" href="{{ url_for('main.story') }}">여행기</a>
+      <a class="nav-link" href="{{ url_for('main.calendar_page') }}">달력</a>
+      <a class="nav-link" href="{{ url_for('photo.upload_page') }}"><span class="hide-sm">사진 </span>올리기</a>
+      <span class="who">{{ g.user.user_id }}</span>
+      <form method="post" action="{{ url_for('auth.logout') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-link">로그아웃</button>
+      </form>
+    </div>
+  </header>
+  {% endif %}
+
+  <main class="{% block main_class %}container{% endblock %}">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

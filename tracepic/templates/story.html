@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}여행기 · TracePic{% endblock %}
+{% block main_class %}story-main{% endblock %}
+
+{% block head %}
+{# 날짜별 동선 지도 — 지도 화면과 같은 버전·SRI #}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/story.css') }}">
+{% endblock %}
+
+{% block content %}
+{# 여행기: 기간 안에서 사진이나 일기가 있는 날을 날짜순으로 — 그날 일기, 동선 지도, 사진(촬영순)과 사진 설명 #}
+<div class="story">
+  <header class="story-head">
+    <div class="story-top">
+      <h1 class="story-h1">여행기</h1>
+      {# PDF 로 저장(브라우저 인쇄 → PDF) · 백업 zip 내려받기 — 지금 기간·상태 그대로 #}
+      <div class="story-actions">
+        <button type="button" id="pdf-btn" class="btn-small btn-ghost" title="인쇄 창에서 'PDF로 저장'을 고르세요">PDF로 저장</button>
+        <button type="button" id="backup-btn" class="btn-small btn-ghost" title="사진·일기·설명을 zip 으로 내려받기">백업 내보내기</button>
+      </div>
+    </div>
+    <form id="story-form" class="story-form">
+      <div class="range-inputs">
+        <input id="start" type="date" aria-label="시작일" required>
+        <span class="muted">~</span>
+        <input id="end" type="date" aria-label="종료일" required>
+        <button type="submit" class="btn-small">보기</button>
+      </div>
+      <fieldset class="status-filter">
+        <legend class="sr-only">사진 상태 조건</legend>
+        {% for code, label in status_labels.items() %}
+        <label class="chip st-{{ code }}">
+          <input type="checkbox" name="status" value="{{ code }}" {% if code in default_statuses %}checked{% endif %}>
+          <span class="dot" aria-hidden="true"></span>{{ label }}
+        </label>
+        {% endfor %}
+      </fieldset>
+    </form>
+    <p id="story-summary" class="muted small story-summary" aria-live="polite">불러오는 중…</p>
+    {# 날짜 바로가기 (JS 가 채움) #}
+    <nav id="story-toc" class="story-toc" aria-label="날짜 바로가기"></nav>
+  </header>
+
+  <div id="story-days" class="story-days"></div>
+</div>
+
+{# 백업 내보내기 확인 #}
+<dialog id="backup-dlg" class="dv" aria-labelledby="bk-title">
+  <header class="dv-head">
+    <div>
+      <h2 id="bk-title" class="dv-title">백업 내보내기</h2>
+      <div id="bk-range" class="dv-date"></div>
+    </div>
+    <button type="button" class="pv-close" data-close aria-label="닫기">×</button>
+  </header>
+  <div class="dv-body bk-body">
+    <p id="bk-summary"></p>
+    <ul class="bk-list small">
+      <li>사진: 웹용 크기 JPEG (원본은 TracePic 에 보관하지 않습니다)</li>
+      <li>일기·사진 설명: 마크다운(.md) 파일</li>
+      <li>사진 목록: photos.csv (촬영 시각·위치·상태, 엑셀에서 열림)</li>
+    </ul>
+    <label class="check bk-check"><input id="bk-exif" type="checkbox" checked> 사진 파일에 촬영 시각·위치(EXIF) 넣기 — 다른 앱이나 TracePic 에 다시 올리면 그대로 잡힙니다</label>
+    <p class="muted small">⚠️ 내려받은 파일은 암호화되어 있지 않습니다. 안전한 곳에 보관하세요.</p>
+  </div>
+  <footer class="dv-foot">
+    <span class="spacer"></span>
+    <button type="button" class="btn-small btn-ghost" data-close>취소</button>
+    <a id="bk-download" class="btn-small" href="#" download>내려받기</a>
+  </footer>
+</dialog>
+
+<script id="story-config" type="application/json">
+  {{ {
+       "apiUrl": url_for("api.story"),
+       "backupUrl": url_for("backup.download"),
+       "diaryPage": url_for("diary.index"),
+       "mapPage": url_for("main.index"),
+       "defaultStatuses": default_statuses|list,
+     }|tojson }}
+</script>
+<script src="{{ url_for('static', filename='js/dayview.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/story.js') }}" defer></script>
+{% endblock %}

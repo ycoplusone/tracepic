@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}달력 · TracePic{% endblock %}
+{% block main_class %}cal-main{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/calendar.css') }}">
+{% endblock %}
+
+{% block content %}
+{# 달력: 날짜별 사진 수(색 진하기)·📖 일기·첫/마지막 촬영 시각·이동 거리. 날짜를 누르면 오른쪽(모바일은 아래)에 자세히 #}
+<div class="cal">
+  <header class="cal-head">
+    <div class="cal-nav">
+      <button type="button" id="cal-prev" class="cal-btn" aria-label="이전 달">‹</button>
+      <h1 id="cal-title" class="cal-title" aria-live="polite"></h1>
+      <button type="button" id="cal-next" class="cal-btn" aria-label="다음 달">›</button>
+      <button type="button" id="cal-today" class="btn-small btn-ghost">이번 달</button>
+    </div>
+    <fieldset class="status-filter">
+      <legend class="sr-only">사진 상태 조건</legend>
+      {% for code, label in status_labels.items() %}
+      <label class="chip st-{{ code }}">
+        <input type="checkbox" name="status" value="{{ code }}" {% if code in default_statuses %}checked{% endif %}>
+        <span class="dot" aria-hidden="true"></span>{{ label }}
+      </label>
+      {% endfor %}
+    </fieldset>
+  </header>
+  <p id="cal-total" class="cal-total muted small" aria-live="polite">불러오는 중…</p>
+
+  <div class="cal-body">
+    <div class="cal-board">
+      <div class="cal-week" aria-hidden="true">
+        <span class="sun">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span class="sat">토</span>
+      </div>
+      {# 날짜 칸 (JS 가 채움) — Tab 은 고른 날 하나에만 멈추고, 방향키로 이동(←→ 하루, ↑↓ 한 주, PageUp/Down 한 달) #}
+      <div id="cal-grid" class="cal-grid" role="grid" aria-label="날짜"></div>
+      <p class="cal-legend muted small">
+        <span class="lg-box h1"></span><span class="lg-box h2"></span><span class="lg-box h3"></span><span class="lg-box h4"></span>
+        사진이 많을수록 진하게 · 📖 일기 · 이동 거리는 사진 위치를 촬영순으로 이은 직선거리
+      </p>
+    </div>
+
+    <aside id="cal-detail" class="cal-detail" aria-live="polite">
+      <p class="muted small">날짜를 고르면 그날 기록이 여기에 나옵니다.</p>
+    </aside>
+  </div>
+</div>
+
+<script id="cal-config" type="application/json">
+  {{ {
+       "apiUrl": url_for("api.calendar_month"),
+       "mapPage": url_for("main.index"),
+       "storyPage": url_for("main.story"),
+       "diaryPage": url_for("diary.index"),
+       "defaultStatuses": default_statuses|list,
+     }|tojson }}
+</script>
+<script src="{{ url_for('static', filename='js/calendar.js') }}" defer></script>
+{% endblock %}

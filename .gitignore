@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+*:Zone.Identifier
+.venv/
+__pycache__/
+*.pyc
+# 저장소·로그는 프로젝트 외부(../tracepic_storage, ../tracepic_logs)에 둔다
+*.log

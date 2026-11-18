@@ -1,0 +1,118 @@
+/* 여행기 화면 (/story) — 날짜별 일기 · 동선 지도 · 사진과 설명을 위에서 아래로 이어 읽는다 */
+.story-main { padding: 0 16px 64px; }
+.story { max-width: 880px; margin: 0 auto; }
+
+/* 머리: 기간·상태 + 요약 + 날짜 바로가기 (스크롤해도 위에 붙어 있다) */
+.story-head {
+  position: sticky; top: 0; z-index: 1000; display: flex; flex-direction: column; gap: 8px;
+  padding: 14px 0 10px; background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.story-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.story-h1 { margin: 0; font-size: 22px; }
+.story-actions { display: flex; gap: 6px; }
+.sd-stats { font-variant-numeric: tabular-nums; }
+/* 백업 내보내기 창 */
+.bk-body p { margin: 0 0 10px; }
+.bk-list { margin: 0 0 12px; padding-left: 1.2em; color: var(--muted); line-height: 1.7; }
+.bk-check { margin: 0 0 10px; align-items: flex-start; font-size: 14px; line-height: 1.5; }
+.bk-check input { margin-top: 3px; }
+#bk-download { text-decoration: none; }
+#bk-download[hidden] { display: none; }
+.story-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.story-form .range-inputs { max-width: 420px; }
+.story-summary { margin: 0; }
+.story-toc { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.story-toc:empty { display: none; }
+.toc-item {
+  flex: none; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border);
+  font-size: 13px; color: var(--text); text-decoration: none; white-space: nowrap; background: var(--surface);
+}
+.toc-item:hover { border-color: var(--accent); color: var(--accent); }
+
+/* 하루 */
+.story-day { padding: 28px 0 8px; border-bottom: 1px dashed var(--border); scroll-margin-top: 170px; }
+.sd-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; margin-bottom: 12px; }
+.sd-date { margin: 0; font-size: 20px; }
+.sd-meta { display: flex; align-items: baseline; gap: 14px; }
+.sd-link { font-size: 14px; color: var(--accent); text-decoration: none; }
+.sd-link:hover { text-decoration: underline; }
+
+/* 그날 일기 */
+.sd-diary {
+  padding: 14px 18px; margin-bottom: 14px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent);
+}
+.sd-diary-title { margin: 0 0 8px; font-size: 17px; word-break: keep-all; }
+.story .md-body { line-height: 1.75; font-size: 15px; }
+.story .md-body > :last-child { margin-bottom: 0; }
+
+/* 동선 지도 */
+.sd-map { height: 320px; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 14px; background: var(--surface); }
+
+/* 사진 — 설명 있는 사진(크게) / 설명 없는 사진(타일 묶음), 모두 촬영순 */
+.sd-photos { display: flex; flex-direction: column; gap: 14px; }
+.sd-tiles { display: flex; flex-wrap: wrap; gap: 12px 10px; }
+.sd-tile, .sd-noted-img {
+  position: relative; padding: 0; border: 0; background: none; cursor: pointer; color: var(--text); font: inherit;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.sd-tile img {
+  width: 84px; height: 84px; object-fit: cover; display: block; border-radius: 8px;
+  border: 3px solid var(--st-C); box-shadow: 0 0 0 1px var(--border); background: #ccc;
+}
+.sd-tile .time { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sd-noted { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 16px; margin: 0; align-items: start; }
+.sd-noted-img img {
+  width: 240px; height: 180px; object-fit: cover; display: block; border-radius: 8px;
+  border: 3px solid var(--st-C); box-shadow: 0 0 0 3px var(--note); background: #ccc;
+}
+.sd-noted-text { min-width: 0; }
+.sd-time { margin-bottom: 2px; }
+.sd-note-title { margin: 0 0 6px; font-size: 16px; word-break: keep-all; }
+/* 테두리 색 = 상태 (지도 화면과 같은 규칙), 순번 배지 */
+:is(.sd-tile, .sd-noted-img).st-A img { border-color: var(--st-A); }
+:is(.sd-tile, .sd-noted-img).st-B img { border-color: var(--st-B); }
+:is(.sd-tile, .sd-noted-img) .seq {
+  position: absolute; top: -6px; left: -6px; min-width: 20px; height: 20px; padding: 0 5px; display: grid; place-items: center;
+  border-radius: 10px; border: 2px solid #fff; background: #1f2328; color: #fff; font-size: 11px; font-weight: 700; line-height: 1;
+}
+:is(.sd-tile, .sd-noted-img).is-selected img { outline: 3px solid #ff5a36; outline-offset: 1px; }
+.sd-noted-img.is-selected img { outline-offset: 4px; }
+:is(.sd-tile, .sd-noted-img).is-selected .seq { background: #ff5a36; }
+:is(.sd-tile, .sd-noted-img):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 8px; }
+
+@media (max-width: 720px) {
+  .story-main { padding: 0 12px 48px; }
+  .story-day { scroll-margin-top: 210px; }
+  .sd-map { height: 240px; }
+  .sd-noted { grid-template-columns: 1fr; gap: 8px; }
+  .sd-noted-img img { width: 100%; height: auto; aspect-ratio: 4 / 3; }
+  .sd-noted-img { align-items: stretch; }
+  .sd-tile img { width: 72px; height: 72px; }
+}
+
+/* ============================================================
+   PDF로 저장 (인쇄) — A4 세로, 조작 버튼은 숨기고 내용만
+   - JS 가 인쇄 전에 body.printing 을 붙여 본문 폭을 A4 인쇄 폭(약 700px)에 맞추고 지도를 그 크기로 다시 맞춘다.
+   ============================================================ */
+body.printing .story { max-width: 700px; }
+@page { size: A4; margin: 12mm; }
+@media print {
+  html, body { background: #fff !important; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; display: block !important; height: auto !important; }
+  .topbar, .story-form, .story-toc, .story-actions, .sd-link,
+  .leaflet-control-container, .lightbox, dialog { display: none !important; }
+  .story-main { padding: 0; }
+  .story { max-width: 700px; }
+  .story-head { position: static; border-bottom: 2px solid #222; padding-top: 0; }
+  .story-h1 { font-size: 24px; }
+  .story-summary { color: #333; font-size: 13px; }
+  .story-day { padding-top: 18px; border-bottom-color: #bbb; }
+  .sd-head { break-after: avoid; }
+  .sd-diary, .sd-map, .sd-noted, .sd-tiles { break-inside: avoid; }
+  .sd-diary { border-color: #ccc; }
+  .sd-map { height: 300px; border-color: #ccc; }
+  .sd-tile, .sd-noted-img { cursor: default; }
+  :is(.sd-tile, .sd-noted-img).is-selected img { outline: none; }
+  .story .md-body a { color: inherit; text-decoration: underline; }
+}

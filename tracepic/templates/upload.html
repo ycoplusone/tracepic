@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}사진 올리기 · TracePic{% endblock %}
+
+{% block content %}
+<h2 class="page-title">사진 올리기</h2>
+<p class="muted small">
+  촬영 시각과 위치(GPS)는 사진 정보(EXIF)에서 자동으로 읽습니다. 사진은 암호화되어 저장됩니다.
+  파일당 최대 {{ max_mb }}MB · JPG, PNG, WEBP{% if heif_supported %}, HEIC{% endif %}
+</p>
+
+{# 업로드 설정: 공개 범위 #}
+<div class="upload-options">
+  <label for="status">공개 범위</label>
+  <select id="status" name="status">
+    {% for value, label in status_choices %}
+      <option value="{{ value }}">{{ label }}</option>
+    {% endfor %}
+  </select>
+</div>
+
+{# 파일 선택 / 끌어다 놓기 영역 — 키보드로도 선택할 수 있게 label 로 감싼다 #}
+<label id="dropzone" class="dropzone" for="file-input">
+  <input id="file-input" type="file" multiple
+         accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif">
+  <strong>사진을 여기에 끌어다 놓거나 눌러서 선택하세요</strong>
+  <span class="muted small">여러 장을 한 번에 올릴 수 있습니다</span>
+</label>
+
+{# 진행 요약 #}
+<p id="summary" class="summary" aria-live="polite" hidden></p>
+
+{# 파일별 결과 목록 (JS 가 채움) #}
+<ul id="upload-list" class="upload-list"></ul>
+
+<div id="done-actions" class="done-actions" hidden>
+  <a href="{{ url_for('main.index') }}">지도에서 보기</a>
+</div>
+
+{# JS 에 넘길 설정값 #}
+<script id="upload-config" type="application/json">
+  {{ {"uploadUrl": url_for("photo.upload"), "maxBytes": max_mb * 1024 * 1024}|tojson }}
+</script>
+<script src="{{ url_for('static', filename='js/upload.js') }}" defer></script>
+{% endblock %}
