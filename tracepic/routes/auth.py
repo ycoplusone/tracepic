@@ -20,7 +20,11 @@ PUBLIC_ENDPOINTS = {
     # 메일 가입 신청 · 비밀번호 찾기 (routes/account.py)
     "account.signup", "account.signup_verify", "account.signup_resend",
     "account.password_forgot", "account.password_reset", "account.password_resend",
+    # 앱 로그인 (routes/app_api.py) — 아이디·비밀번호로 device_token 을 받는 곳
+    "app_api.login",
 }
+# 앱 API 블루프린트: 세션 쿠키 대신 (user_id, device_token) 으로만 인증한다
+APP_BLUEPRINT = "app_api"
 
 # 로그인 확인 결과 캐시: (user_id, device_token) → 사용자 정보
 # 지도 화면은 썸네일 수십 장을 한꺼번에 요청한다. 요청마다 user_devices 를 조회하지 않도록 AUTH_CACHE_SECONDS 동안 기억한다.
@@ -42,12 +46,28 @@ def _verify(user_id: str, token: str) -> dict | None:
     return user
 
 
+def forget_cached(user_id: str | None, token: str | None) -> None:
+    """로그아웃한 토큰을 이 워커의 로그인 캐시에서 바로 지운다"""
+    if user_id and token:
+        _auth_cache.delete((user_id, token))
+
+
 @bp.before_app_request
 def require_login():
     """전역 로그인 가드: 세션 키 → user_devices 검증"""
     g.user = None
     if request.endpoint in PUBLIC_ENDPOINTS or request.endpoint is None:
         return None  # endpoint None = 존재하지 않는 URL → 404 처리에 맡김
+
+    # ── 앱 API: 헤더(또는 폼)의 user_id + device_token 으로만 확인. 세션은 읽지도 바꾸지도 않는다 ──
+    if request.blueprint == APP_BLUEPRINT:
+        from .app_api import app_credentials      # 순환 import 방지
+        app_user_id, app_token = app_credentials()
+        user = _verify(app_user_id, app_token) if app_user_id and app_token else None
+        if user is None:
+            return jsonify(ok=False, error="로그인이 필요합니다. 다시 로그인해 주세요."), 401
+        g.user = user
+        return None
 
     user_id = session.get("user_id")
     token = session.get("device_token")

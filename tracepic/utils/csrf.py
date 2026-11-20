@@ -40,6 +40,10 @@ def init_app(app: Flask) -> None:
     def _check_csrf():
         if request.method not in _UNSAFE_METHODS or request.endpoint == "static":
             return None
+        # 앱 API(/api/app/*)는 쿠키가 아니라 요청에 직접 넣은 device_token 으로만 인증한다
+        # (routes/auth.require_login). 브라우저가 자동으로 붙이는 자격 증명이 없으니 위조 요청이 성립하지 않는다.
+        if request.blueprint == "app_api":
+            return None
         if _is_valid():
             return None
         message = "보안 토큰이 만료되었습니다. 페이지를 새로고침한 뒤 다시 시도하세요."
