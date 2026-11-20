@@ -33,13 +33,14 @@
 </label>
 
 {# 두 번째 선택 방법: 파일 탐색기로 원본 파일 고르기
-   안드로이드의 사진 선택 도구(위 영역)는 웹 브라우저에 위치(GPS)를 지운 사본을 넘긴다.
-   형식을 세부 MIME·확장자로 적으면 파일 탐색기가 열리고, 원본 파일이 넘어와 위치가 남는 경우가 많다. #}
+   안드로이드는 휴대폰 안의 사진을 브라우저에 넘길 때 위치(GPS)를 지운다(미디어 저장소의 위치 가림 — 사진첩·파일 앱 모두).
+   구글 드라이브 같은 클라우드에서 고르면 원본 바이트가 그대로 넘어와 위치가 남는다(2026-11-20 사용자 확인).
+   형식을 세부 MIME·확장자로 적으면 사진 선택 도구 대신 파일 탐색기가 열리고, 거기서 클라우드를 고를 수 있다. #}
 <p class="pick-alt">
-  <label for="file-input-raw" class="btn-small btn-ghost">파일에서 선택 (위치 유지)</label>
+  <label for="file-input-raw" class="btn-small btn-ghost">드라이브·클라우드에서 선택 (위치 유지)</label>
   <input id="file-input-raw" class="sr-only" type="file" multiple
          accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.heic,.heif{% if video_supported %},video/mp4,video/quicktime,{% for e in video_exts %}.{{ e }}{{ ',' if not loop.last }}{% endfor %}{% endif %}">
-  <span class="muted small">휴대폰에서 올린 사진에 위치가 빠지면 여기서 골라 보세요 (파일 앱 → 이미지/DCIM)</span>
+  <span class="muted small">휴대폰 사진첩에서 고르면 안드로이드가 위치를 지웁니다. 구글 드라이브 등에 원본 그대로 올려 둔 사진을 여기서 고르면 위치가 남습니다.</span>
 </p>
 
 {# 진행 요약 #}
