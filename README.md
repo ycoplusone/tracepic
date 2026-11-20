@@ -316,3 +316,10 @@ curl http://127.0.0.1:5555/health    # {"status":"ok","db":"ok"}
 - 여행기 '백업 내보내기': 기간·상태의 사진(JPEG)·일기·사진 설명(.md)·photos.csv·README 를 zip 으로(`/backup/download`)
   - 복호화한 사진을 디스크에 쓰지 않고 스트리밍. 사진 파일에 촬영 시각·GPS(EXIF)를 다시 넣는 선택(기본 켬, 재인코딩 없음)
 - 테스트 53항목 추가(`test_tools`), 기존 테스트 전체 재통과
+
+### 18회차 — 비밀번호 bcrypt 변환
+- `user_info.password` 평문 → bcrypt(`$2b$12$`, 60자) 일괄 변환 (2026-11-20 사용자 결정, 같은 테이블을 쓰는 다른 서비스도 bcrypt 검증 지원)
+  - `scripts/hash_passwords.py` (`--dry-run`으로 건수만 확인) → `auth_logic.hash_plain_passwords`
+  - 한 트랜잭션, 해시 검증 후 저장, 이미 해시인 행은 건너뜀(여러 번 실행해도 안전), 그사이 바뀐 행은 덮어쓰지 않음, 비밀번호 값은 출력하지 않음
+  - 개발 DB 5명 변환 완료. 운영 DB가 따로 있으면 서버에서 같은 스크립트를 실행
+- `utils/password.py`: `hash_password()`(72바이트 제한), `is_hashed()` 추가. 로그인 검증은 기존대로 bcrypt·werkzeug·평문 자동 판별

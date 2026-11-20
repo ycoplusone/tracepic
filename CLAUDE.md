@@ -33,11 +33,14 @@
 
 ## 인증(로그인) 설계
 - **공유 테이블**: `user_info`, `user_devices`는 다른 서비스와 같이 씁니다.
-  - `user_info`는 **읽기만** 합니다. 비밀번호 형식이나 컬럼을 바꾸지 않습니다.
+  - `user_info`는 **읽기만** 합니다. 컬럼을 바꾸지 않습니다.
+    - 유일한 예외: 평문 비밀번호 → bcrypt 일괄 변환(`scripts/hash_passwords.py` → `auth_logic.hash_plain_passwords`, 2026-11-20 사용자 결정, 다른 서비스도 bcrypt 검증 지원 확인). 이미 해시인 행은 건너뜁니다.
   - `user_devices`에는 TracePic이 발급한 토큰만 INSERT(로그인)하고 DELETE(로그아웃)합니다. 다른 행은 건드리지 않습니다.
   - `user_devices` 중 8건은 `user_info`에 없는 아이디입니다(다른 서비스 데이터로 추정). 그래서 검증할 때 `user_info`와 JOIN합니다.
-- **비밀번호** (2026-11-13 사용자 결정: 해시와 평문 둘 다 허용): `utils/password.py`가 저장값 형식을 보고 bcrypt, werkzeug, 평문(`compare_digest`) 중 맞는 방식으로 검증합니다.
-  - 현재 실제 저장값은 **평문 4자리**입니다. 해시로 옮기는 것은 다른 서비스와 함께 결정할 문제입니다.
+- **비밀번호**: `utils/password.py`가 저장값 형식을 보고 bcrypt, werkzeug, 평문(`compare_digest`) 중 맞는 방식으로 검증합니다.
+  - 2026-11-20 개발 DB의 5명 모두 **bcrypt(`$2b$12$`, 60자)로 변환**했습니다. 평문 분기는 다른 서비스가 새로 평문으로 넣은 행에 대한 호환용으로만 남깁니다.
+  - 운영 DB가 따로 있으면 서버에서도 `.venv/bin/python scripts/hash_passwords.py --dry-run`으로 건수를 확인한 뒤 실행합니다(되돌릴 수 없음).
+  - 새 비밀번호를 만들 때는 `hash_password()`(bcrypt, 72바이트 제한)를 씁니다.
   - ⚠️ `password` 컬럼은 일부 문자열이라도 SELECT 결과로 출력하지 않습니다. 형식을 확인할 때는 `LENGTH`, `LIKE '$2%'` 같은 집계만 씁니다.
 - **흐름**: `routes/auth.py`의 `require_login`(`before_app_request`)이 모든 요청을 검사합니다. 세션에는 `user_id`와 `device_token`만 저장합니다(서명된 쿠키 `tracepic_session`, 180일).
   - 공개 엔드포인트는 `PUBLIC_ENDPOINTS`에 등록합니다(현재 `auth.login`, `main.health`, `static`). 새 공개 페이지는 반드시 여기에 추가합니다.
@@ -171,6 +174,7 @@
 - [x] 사진·일기 연결: 지도 날짜별 일기(📖·요약·펼치기·쓰기), 일기 읽기 창의 동선 지도, 여행기 `/story` (2026-11-18, 테스트 26항목 통과)
 - [x] 달력(사진 수·일기·첫/마지막 시각·이동 거리), 일기·사진 설명 검색, 여행기 PDF 저장, 백업 zip 내보내기 (2026-11-18, 테스트 53항목 통과)
 - [x] 일기 화면 `/diary` (일별 마크다운 기록, 3D 카드 링) (2026-11-17)
+- [x] user_info 비밀번호 bcrypt 일괄 변환 (2026-11-20, 5명)
 - [ ] 배포 (Nginx, systemd, gunicorn) — **HTTPS는 보류 (2026-11-13 사용자 결정, 기능 개발 우선)**. 배포할 때 Nginx + Let's Encrypt + ProxyFix로 진행할 예정
 
 ## Git 커밋 규칙
