@@ -263,7 +263,7 @@ body:has(.map-main) { display: flex; flex-direction: column; height: 100dvh; }
 }
 .viewer::backdrop { background: rgba(0,0,0,.8); }
 /* 행 높이를 1fr 로 고정해야 세로 사진의 원래 높이가 칸을 늘리지 않는다 */
-.pv { display: grid; grid-template-columns: minmax(0, 1fr) 380px; grid-template-rows: minmax(0, 1fr); height: 100%; }
+.pv { display: grid; grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: minmax(0, 1fr); height: 100%; }
 .pv-stage { position: relative; background: #000; min-height: 0; min-width: 0; overflow: hidden; }
 /* 사진은 사진 칸에 꽉 맞춰 넣고(contain) 비율을 유지한다 — 가로·세로 어느 쪽이든 잘리지 않는다 */
 .pv-stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
@@ -317,7 +317,7 @@ body:has(.map-main) { display: flex; flex-direction: column; height: 100dvh; }
 .pv-preview { font-family: inherit; overflow-y: auto; }
 .pv .tabs { display: flex; align-items: center; gap: 4px; }
 .pv .tabs .muted { margin-left: auto; }
-.pv .tab { font: inherit; font-size: 13px; padding: 4px 12px; border-radius: 999px; border: 0; background: none; color: var(--muted); cursor: pointer; }
+.pv .tab { font: inherit; font-size: 14px; padding: 6px 14px; border-radius: 999px; border: 0; background: none; color: var(--muted); cursor: pointer; }
 .pv .tab.is-on { background: var(--text); color: var(--surface); }
 .pv-form-actions { display: flex; align-items: center; gap: 6px; }
 .pv-form-actions .spacer { flex: 1; }
@@ -415,3 +415,24 @@ body:has(.map-main) { display: flex; flex-direction: column; height: 100dvh; }
   .lb-img { inset: 52px 0 56px; width: 100%; height: calc(100% - 108px); }
   .lb-nav { width: 36px; height: 54px; font-size: 28px; }
 }
+
+/* ── 사진 설명 마크다운 편집기 (OverType, static/js/mdedit.js) — 원래 #pv-note 자리 ── */
+.pv-note-box {
+  flex: 1; min-height: 240px; display: flex; flex-direction: column;
+  border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+}
+.pv-note-box:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pv-note-box > .overtype-container { flex: 1; min-height: 0; height: 100%; }
+/* 툴바: 좁은 칸(사진 설명)에서 가로 스크롤 대신 줄바꿈 — OverType 기본값이 !important 라 더 구체적인 선택자 + !important */
+.md-editor .overtype-container .overtype-toolbar {
+  flex-wrap: wrap !important; overflow: visible !important; row-gap: 2px !important;
+}
+
+/* 사진 설명 '쓰기' / '고치기' 버튼 — 누르기 쉽게 크게 */
+#pv-edit {
+  font-size: 15px; font-weight: 600; padding: 6px 16px; border-radius: 999px;
+  border: 1px solid var(--accent); color: var(--accent);
+}
+#pv-edit:hover { background: var(--accent); color: var(--accent-text); }
+/* 사진 설명 툴바 한 줄: 옆 칸 400px(안쪽 약 365px) 안에 버튼 9개 + 구분선 3개가 들어가도록 간격만 줄임 */
+.pv-note-box .overtype-container .overtype-toolbar { gap: 2px !important; padding: 6px !important; }

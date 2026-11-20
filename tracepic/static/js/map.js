@@ -493,7 +493,9 @@
     status: $("pv-status"), statusMsg: $("pv-status-msg"),
     edit: $("pv-edit"), view: $("pv-view"), loading: $("pv-loading"),
     title: $("pv-title"), html: $("pv-html"), empty: $("pv-empty"), updated: $("pv-updated"),
-    form: $("pv-form"), titleIn: $("pv-title-in"), note: $("pv-note"), preview: $("pv-preview"),
+    form: $("pv-form"), titleIn: $("pv-title-in"), preview: $("pv-preview"),
+    // 설명 본문: OverType 마크다운 편집기 (static/js/mdedit.js, 못 불러오면 원래 textarea). 화면 테마를 따라감
+    note: window.TPMd ? TPMd.attach($("pv-note"), { theme: "auto", className: "pv-note-box" }) : $("pv-note"),
     tabWrite: $("pv-tab-write"), tabPreview: $("pv-tab-preview"),
     error: $("pv-error"), del: $("pv-delete"), cancel: $("pv-cancel"), save: $("pv-save"),
     trash: $("pv-trash"),
