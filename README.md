@@ -323,3 +323,21 @@ curl http://127.0.0.1:5555/health    # {"status":"ok","db":"ok"}
   - 한 트랜잭션, 해시 검증 후 저장, 이미 해시인 행은 건너뜀(여러 번 실행해도 안전), 그사이 바뀐 행은 덮어쓰지 않음, 비밀번호 값은 출력하지 않음
   - 개발 DB 5명 변환 완료. 운영 DB가 따로 있으면 서버에서 같은 스크립트를 실행
 - `utils/password.py`: `hash_password()`(72바이트 제한), `is_hashed()` 추가. 로그인 검증은 기존대로 bcrypt·werkzeug·평문 자동 판별
+
+### 19회차 — 메일 가입 · 관리자 승인 · 비밀번호 찾기
+- 메일 발송 `utils/mail.py`(SMTP, Brevo). 설정은 `.env`의 `SMTP_*`, `MAIL_FROM`, `PUBLIC_BASE_URL`
+- 가입 신청 `/signup` → 6자리 인증 코드 메일 → `/signup/verify` → 관리자 승인 대기 → 승인 시 `user_info` INSERT(아이디 = 메일 주소, role `user`)
+- 비밀번호 찾기 `/password/forgot` → 코드 메일 → `/password/reset`(가입 여부를 알 수 없게 같은 안내, 변경 알림 메일)
+- 관리자 화면 `/admin`: `user_info.role = 'admin'`만 접근(그 외 404), 상단 '관리' 메뉴도 관리자에게만 표시
+- 새 테이블 `tracepic_signup`, `tracepic_email_codes`(사용자 확인 후 추가, `sql/schema.sql` 갱신)
+  - 코드는 HMAC 해시만 저장, 10분 유효, 5회 오류 시 무효, 메일·IP별 발송 제한
+- 테스트 62항목 추가(`test_account`)
+
+### 20회차 — 동영상 → 움직이는 WebP 클립
+- 동영상(mp4·mov·m4v·3gp, 최대 500MB)을 올리면 3~7초 구간만 잘라 WebP 3종(크게 보기 720p / 썸네일 / 마커) 생성, 영상 자체는 보관하지 않음
+  - ffmpeg `-ss 3 -t 4`(입력 앞)로 7초 지점까지만 디코딩, 프레임은 메모리에서 Pillow로 WebP 변환
+  - ffmpeg: `FFMPEG_PATH` → PATH → `imageio-ffmpeg` 순서로 찾음
+- 영상 메타데이터에서 위치(ISO 6709)·촬영 시각 추출. `creation_time`(UTC)은 브라우저 시간대로 변환
+  - ffmetadata 출력에 `creation_time`이 빠지는 문제 → 입력 정보의 Metadata 블록도 함께 읽도록 수정
+- 사진/클립은 WebP 여부로 구분(응답 Content-Type, 백업 zip `.webp`)
+- 테스트 49항목 추가(`test_video`, 실제 ffmpeg 확인 포함), 기존 테스트 전체 재통과

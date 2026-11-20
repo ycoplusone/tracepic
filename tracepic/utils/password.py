@@ -48,3 +48,15 @@ def verify_password(plain: str, stored: str | None) -> bool:
         return False
     # 평문 저장값 (레거시)
     return hmac.compare_digest(plain.encode("utf-8"), stored.encode("utf-8"))
+
+
+def check_new_password(password: str, confirm: str, min_length: int) -> None:
+    """새 비밀번호 규칙 확인 (가입·재설정 공통) — 어긋나면 ValueError(화면에 보여 줄 메시지)"""
+    if password != confirm:
+        raise ValueError("비밀번호 확인이 일치하지 않습니다.")
+    if len(password) < min_length:
+        raise ValueError(f"비밀번호는 {min_length}자 이상이어야 합니다.")
+    if len(password.encode("utf-8")) > 72:
+        raise ValueError("비밀번호가 너무 깁니다 (72바이트 이하).")
+    if password.strip() != password:
+        raise ValueError("비밀번호 앞뒤에 공백을 넣을 수 없습니다.")

@@ -34,7 +34,11 @@
 ## 인증(로그인) 설계
 - **공유 테이블**: `user_info`, `user_devices`는 다른 서비스와 같이 씁니다.
   - `user_info`는 **읽기만** 합니다. 컬럼을 바꾸지 않습니다.
-    - 유일한 예외: 평문 비밀번호 → bcrypt 일괄 변환(`scripts/hash_passwords.py` → `auth_logic.hash_plain_passwords`, 2026-11-20 사용자 결정, 다른 서비스도 bcrypt 검증 지원 확인). 이미 해시인 행은 건너뜁니다.
+    - 예외 (모두 2026-11-20 사용자 결정, 다른 서비스도 bcrypt 검증 지원 확인):
+      - 평문 비밀번호 → bcrypt 일괄 변환(`scripts/hash_passwords.py` → `auth_logic.hash_plain_passwords`). 이미 해시인 행은 건너뜁니다.
+      - 관리자가 가입을 **승인할 때만** INSERT(`account_logic.approve_signup`, user_id = email, role `user`).
+      - 비밀번호 재설정 때만 해당 행의 `password` UPDATE(`account_logic.reset_password`).
+      - 그 밖의 컬럼(role 등)은 TracePic이 바꾸지 않습니다. 관리자 지정은 DB에서 직접 합니다.
   - `user_devices`에는 TracePic이 발급한 토큰만 INSERT(로그인)하고 DELETE(로그아웃)합니다. 다른 행은 건드리지 않습니다.
   - `user_devices` 중 8건은 `user_info`에 없는 아이디입니다(다른 서비스 데이터로 추정). 그래서 검증할 때 `user_info`와 JOIN합니다.
 - **비밀번호**: `utils/password.py`가 저장값 형식을 보고 bcrypt, werkzeug, 평문(`compare_digest`) 중 맞는 방식으로 검증합니다.
@@ -51,6 +55,35 @@
     - 새 폼에는 `<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">`를 넣습니다. fetch나 XHR 요청은 `<meta name="csrf-token">` 값을 `X-CSRF-Token` 헤더로 보냅니다.
   - 배포할 때 **ProxyFix**를 적용합니다. 그래야 로그인 실패 제한이 실제 클라이언트 IP로 동작합니다.
   - 로그인 실패 제한은 메모리 기반이라 gunicorn 워커마다 따로 집계됩니다.
+
+## 동영상 → 움직이는 WebP 클립 (2026-11-20)
+- **동영상 자체는 보관하지 않습니다.** 업로드한 영상의 **3~7초 구간(4초)**만 잘라 움직이는 WebP 3개(image 짧은 변 720px / thumb 긴 변 400px / mini 128px 정사각형, 10fps, 소리 없음)를 만들어 사진과 같은 자리(`.enc`/`.thumb.enc`/`.mini.enc`)에 암호화 저장합니다. DB 구조·지도·필름·크게 보기는 사진과 같습니다(`<img>`로 재생).
+  - 7초보다 짧으면 끝 4초, 4초보다 짧으면 전부를 씁니다(`video.clip_window`).
+  - 사진인지 클립인지는 복호화한 내용이 WebP인지로 구분합니다(`video.is_webp`). 이미지 응답의 Content-Type, 백업 zip 확장자(`.webp`, EXIF 안 넣음)가 이걸로 갈립니다.
+- 변환은 ffmpeg로 합니다(`utils/video.py`). `-ss 3 -t 4`를 입력 앞에 둬서 7초 지점까지만 디코딩하고 멈춥니다. 프레임은 PNG로 파이프에 받아 메모리에서 Pillow로 WebP를 만듭니다(프레임을 디스크에 쓰지 않음).
+  - ffmpeg 찾는 순서: `.env` `FFMPEG_PATH` → PATH의 `ffmpeg`(서버: `sudo apt install ffmpeg`) → 설치돼 있으면 `imageio-ffmpeg`. 없으면 업로드 화면에서 동영상 안내를 숨기고, 올리면 400입니다.
+  - ffmpeg가 파일을 앞뒤로 읽어야 해서 업로드 영상을 `STORAGE_DIR/.tmp`(0700, 파일 0600)에 잠깐 쓰고, 성공·실패와 관계없이 바로 지웁니다. 다만 Flask가 큰 업로드를 시스템 임시 폴더에 먼저 받아 두는 것은 막지 않습니다(0600).
+- 촬영 시각: 영상 메타데이터 → 브라우저가 보낸 파일 수정 시각 → 업로드 시각. `com.apple.quicktime.creationdate`(시간대 포함)는 그 현지 시각 그대로, `creation_time`(UTC, 안드로이드·DJI)은 업로드한 브라우저의 시간대(`tz_offset`, 동쪽 +분)로 바꿉니다. 시간대를 모르면 UTC 값을 쓰지 않습니다.
+- 위치: `com.apple.quicktime.location.ISO6709` / `location` / `location-eng`(ISO 6709). DJI Osmo는 대개 GPS가 없어 위치 없음으로 들어옵니다(크게 보기에서 직접 찍기).
+- 크기 한도: 사진 `MAX_UPLOAD_MB`(30), 동영상 `MAX_VIDEO_MB`(500). `MAX_CONTENT_LENGTH`는 둘 중 큰 값 + 1MB입니다. **Nginx `client_max_body_size`도 500M 이상**이어야 하고, 변환에 수십 초가 걸릴 수 있으니 `proxy_read_timeout`·gunicorn `--timeout`을 넉넉히(300초) 둡니다.
+- HDR·10bit·D-Log 영상은 색 변환(톤매핑)을 하지 않아 색이 흐리게 나올 수 있습니다.
+
+## 메일 가입 · 관리자 승인 · 비밀번호 찾기 (2026-11-20)
+- 메일 발송: `utils/mail.send_mail`(SMTP, 현재 Brevo). 설정은 `.env`의 `SMTP_HOST/PORT/USER/PASSWORD`, `MAIL_FROM`, 선택 `PUBLIC_BASE_URL`(메일 속 링크).
+  - `SMTP_HOST`가 비면 보내지 않고 로그에 남깁니다(개발용 — 코드가 로그에 남으므로 운영에서는 반드시 설정).
+  - Brevo는 등록한 IP에서만 보낼 수 있습니다. 서버 공인 IP를 Brevo Authorised IPs에 추가해야 합니다. SMTP 로그인은 계정 메일이 아니라 `…@smtp-brevo.com`입니다.
+- 가입(`routes/account.py`, 공개): `/signup`(메일·비밀번호) → 인증 코드 메일 → `/signup/verify` → 승인 대기(P) → 관리자 승인 → user_info INSERT.
+  - 신청은 `tracepic_signup`(V 메일 인증 대기 / P 승인 대기 / A 승인 / R 거절)에 bcrypt 해시로 보관합니다. 승인 전에는 user_info에 없으므로 다른 서비스와 로그인에 보이지 않습니다.
+  - 메일 주소는 소문자로 맞추고 50자 이하(`user_info.user_id` varchar 50)만 받습니다. 아이디 = 메일 주소입니다.
+  - 승인 전 로그인: 비밀번호까지 맞을 때만 '승인 대기' 안내를 보여 줍니다(아니면 공통 실패 메시지).
+- 비밀번호 찾기(공개): `/password/forgot`(메일) → 코드 메일 → `/password/reset`(코드 + 새 비밀번호). **관리자 승인 없이 메일 인증만**으로 바뀝니다.
+  - 계정이 있든 없든, 재발송 간격에 걸리든 화면 안내는 같습니다(가입 여부를 떠볼 수 없게). 바뀌면 그 메일로 알림을 보냅니다.
+  - user_devices에서 TracePic 토큰만 골라낼 수 없어, 재설정 뒤에도 이미 로그인한 기기는 그대로입니다.
+- 인증 코드(`tracepic_email_codes`): 6자리, `HMAC-SHA256(SECRET_KEY, 용도:메일:코드)`만 저장, 10분 유효, 5번 틀리면 무효, 새 코드를 받으면 이전 코드는 만료.
+  - 같은 메일·용도: 60초 재발송 간격, 1시간 5통. 같은 IP: 1시간 10통(`account.MAIL_PER_IP_HOUR`, 워커 메모리 기준).
+  - 값은 `config.py`의 `EMAIL_CODE_*`, 새 비밀번호 최소 길이는 `PASSWORD_MIN_LENGTH`(기본 8, 기존 4자리 비밀번호는 그대로 로그인됨).
+- 관리자 화면 `/admin`(`routes/admin.py`): `g.user.role == 'admin'`만 들어가고 나머지는 404입니다. 상단 메뉴 '관리'도 관리자에게만 보입니다. 새 신청이 인증되면 관리자 메일(role admin, email 있음)로 알림이 갑니다.
+  - role은 로그인 확인 캐시 때문에 바꾼 뒤 최대 `AUTH_CACHE_SECONDS`만큼 늦게 반영됩니다.
 
 ## 디렉토리 배치 (프로젝트 외부)
 - 이미지 저장소: `../tracepic_storage` (`STORAGE_DIR`, 권한 0700)
@@ -103,6 +136,7 @@
   - `tracepic_notes`에 user_id가 없습니다. 현재는 pic_id 조인으로 소유권을 확인합니다.
   - `tracepic_daily`의 인덱스 이름이 `tracepic_photos_inx01`로 되어 있습니다(복사 흔적으로 보이며, 동작에는 문제없음).
   - `base_dt` 주석 오타 "촤열" → "촬영"
+- `tracepic_signup` / `tracepic_email_codes` (2026-11-20 사용자 확인 후 추가): 가입 신청 / 메일 인증 코드. 컬럼은 `sql/schema.sql` 참고
 
 ## CRUD 로직 규칙 (photo / note / daily)
 - 모든 함수는 첫 인자로 `user_id`를 받고 SQL에 소유자 조건을 겁니다. 대상이 없거나 남의 데이터면 `None` / `False`를 돌려주고, 입력값이 잘못되면 `ValueError`를 던집니다.
@@ -175,6 +209,8 @@
 - [x] 달력(사진 수·일기·첫/마지막 시각·이동 거리), 일기·사진 설명 검색, 여행기 PDF 저장, 백업 zip 내보내기 (2026-11-18, 테스트 53항목 통과)
 - [x] 일기 화면 `/diary` (일별 마크다운 기록, 3D 카드 링) (2026-11-17)
 - [x] user_info 비밀번호 bcrypt 일괄 변환 (2026-11-20, 5명)
+- [x] 메일 가입 신청(인증 코드) · 관리자 승인 화면 · 비밀번호 찾기 (2026-11-20, 테스트 62항목 통과)
+- [x] 동영상 업로드 → 3~7초 움직이는 WebP 클립 3종 (2026-11-20, 실제 ffmpeg 포함 테스트 49항목 통과, 사용자 실제 영상 확인 — 위치·촬영 시각 추출 정상)
 - [ ] 배포 (Nginx, systemd, gunicorn) — **HTTPS는 보류 (2026-11-13 사용자 결정, 기능 개발 우선)**. 배포할 때 Nginx + Let's Encrypt + ProxyFix로 진행할 예정
 
 ## Git 커밋 규칙

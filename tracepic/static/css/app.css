@@ -70,6 +70,31 @@ body {
 }
 .alert { padding: 10px 12px; border-radius: 8px; font-size: 14px; margin: 0 0 8px; }
 .alert-error { background: var(--error-bg); color: var(--error-text); }
+.alert-info { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); color: var(--text); }
+
+/* 가입 신청 · 비밀번호 찾기 (로그인 카드 공통) */
+.login-links { margin: 16px 0 0; text-align: center; color: var(--muted); }
+.login-links a { color: var(--accent); text-decoration: none; }
+.login-links a:hover { text-decoration: underline; }
+.login-links form, form.login-links { display: block; }
+.login-card .code-input { font-size: 22px; letter-spacing: .4em; text-align: center; font-variant-numeric: tabular-nums; }
+.btn-block { display: block; text-align: center; text-decoration: none; }
+
+/* 관리자 화면 */
+.adm-h2 { margin: 20px 0 8px; font-size: 17px; }
+.adm-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.adm-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.adm-table th, .adm-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+.adm-table th { font-size: 13px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+.adm-table tbody tr:last-child td { border-bottom: 0; }
+.adm-email { word-break: break-all; }
+.adm-time { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted); }
+.adm-actions { display: flex; gap: 6px; }
+.adm-actions form { margin: 0; }
+.adm-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--border); white-space: nowrap; }
+.adm-badge.st-P { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.adm-badge.st-A { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.adm-badge.st-R, .adm-badge.st-V { color: var(--muted); }
 
 /* 상단 메뉴 링크 / 인라인 버튼 */
 .nav-link { color: var(--text); text-decoration: none; font-size: 14px; }

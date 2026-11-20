@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}메일 인증 · TracePic{% endblock %}
+{% block main_class %}login-wrap{% endblock %}
+
+{% block content %}
+{# 가입 2단계: 메일로 받은 6자리 코드 #}
+<section class="login-card">
+  <h1 class="brand-lg">메일 인증</h1>
+  <p class="sub"><strong>{{ email }}</strong> 로 보낸 6자리 코드를 입력하세요.</p>
+  {% include "_flash.html" %}
+  <form method="post" action="{{ url_for('account.signup_verify') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="code">인증 코드</label>
+    <input id="code" name="code" class="code-input" inputmode="numeric" pattern="\d{6}" maxlength="6"
+           autocomplete="one-time-code" required autofocus>
+    <button type="submit" class="btn-primary">인증하기</button>
+  </form>
+  <form method="post" action="{{ url_for('account.signup_resend') }}" class="login-links small">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    메일이 안 왔나요? (스팸함도 확인)
+    <button type="submit" class="btn-link small">코드 다시 받기</button>
+    · <a href="{{ url_for('account.signup') }}">메일 주소 바꾸기</a>
+  </form>
+</section>
+{% endblock %}

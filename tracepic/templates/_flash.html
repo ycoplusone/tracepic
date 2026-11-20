@@ -1,0 +1,6 @@
+{# 안내·오류 메시지 (flash) — 로그인·가입·비밀번호 찾기·관리 화면 공통 #}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, msg in messages %}
+    <p class="alert alert-{{ category }}" role="{{ 'alert' if category == 'error' else 'status' }}">{{ msg }}</p>
+  {% endfor %}
+{% endwith %}

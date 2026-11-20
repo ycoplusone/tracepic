@@ -14,6 +14,12 @@
   마커용 파일이 없는 예전 사진은 처음 요청될 때 썸네일로 만들어 저장한다 (read_image).
 - 저장된 파일은 바뀌지 않는다 → 응답에 ETag 와 긴 캐시 기간을 붙일 수 있다 (image_ref 의 etag).
 - 원본 파일은 보관하지 않는다 (IMAGE_MAX_SIDE 로 줄인 JPEG 만 저장).
+
+동영상 (save_video_upload, 2026-11-20)
+- 동영상은 보관하지 않고 3~7초 구간만 움직이는 WebP 3개(image 720p / thumb 400 / mini 128)로 만들어
+  사진과 똑같은 자리(.enc / .thumb.enc / .mini.enc)에 저장한다 → DB 구조·화면은 사진과 같다(<img> 로 재생됨).
+- 사진인지 클립인지는 복호화한 내용(WebP 여부)으로 구분한다 (utils/video.is_webp).
+- ffmpeg 가 파일을 앞뒤로 오가며 읽어야 해서 업로드 영상을 STORAGE_DIR/.tmp(0700)에 잠깐 쓰고, 변환이 끝나면 바로 지운다.
 """
 import hashlib
 import os
@@ -25,7 +31,7 @@ from pathlib import Path
 
 from flask import current_app
 
-from ..utils import crypto, exif, image
+from ..utils import crypto, exif, image, video
 from . import photo_logic
 
 _ENC_SUFFIX = ".enc"
@@ -41,7 +47,7 @@ class UploadResult:
     pic_id: int
     base_dt: str
     photo_at: datetime
-    time_source: str          # 'exif' | 'file' | 'upload' — 촬영 시각을 어디서 얻었는지
+    time_source: str          # 'exif' | 'meta'(동영상) | 'file' | 'upload' — 촬영 시각을 어디서 얻었는지
     latitude: float | None
     longitude: float | None
 
@@ -117,8 +123,49 @@ def save_upload(user_id: str, data: bytes, original_file_name: str | None,
         "thumb": image.to_jpeg(rgb, image.THUMB_SIDE, 80),
         "mini": image.to_square_jpeg(rgb, image.MINI_SIDE, 75),
     }
+    return _store(user_id, jpegs, photo_at, source, lat, lng, original_file_name, status)
 
-    # ── 암호화 파일 저장 ──
+
+def save_video_upload(user_id: str, src_path: Path, original_file_name: str | None,
+                      client_time: datetime | None = None, tz_minutes: int | None = None,
+                      status: str = photo_logic.STATUS_PRIVATE) -> UploadResult:
+    """
+    동영상 → 3~7초 구간 움직이는 WebP 3개를 암호화 저장하고 DB 에 등록 (동영상 자체는 저장하지 않음)
+    - src_path 는 호출한 쪽이 STORAGE_DIR/.tmp 에 잠깐 쓴 업로드 파일이다. 지우는 것도 호출한 쪽이 한다.
+    - 촬영 시각: 영상 메타데이터 → 브라우저가 보낸 파일 수정 시각 → 업로드 시각. 위치: 영상 메타데이터(없으면 NULL).
+    - 동영상 문제는 video.VideoError 로 알린다 (메시지는 사용자에게 보여 줘도 됨).
+    """
+    ffmpeg = video.find_ffmpeg(current_app.config["FFMPEG_PATH"] or None)
+    if ffmpeg is None:
+        raise video.VideoError("서버에 ffmpeg 가 없어 동영상을 올릴 수 없습니다.")
+    duration, tags = video.probe(ffmpeg, src_path)
+
+    photo_at, source = video.parse_time(tags, tz_minutes), "meta"
+    if photo_at is None and client_time is not None:
+        photo_at, source = client_time, "file"
+    if photo_at is None:
+        photo_at, source = datetime.now().replace(microsecond=0), "upload"
+    gps = video.parse_location(tags)
+    lat, lng = gps if gps else (None, None)
+
+    start, length = video.clip_window(duration)
+    frames = video.extract_frames(ffmpeg, src_path, start, length)
+    webps = {kind: video.to_webp(frames, kind) for kind in KINDS}
+    return _store(user_id, webps, photo_at, source, lat, lng, original_file_name, status)
+
+
+def temp_upload_path() -> Path:
+    """업로드 동영상을 잠깐 둘 경로 — STORAGE_DIR/.tmp (0700, 웹으로 열리지 않음). 쓰고 나면 호출한 쪽이 지운다"""
+    root = current_app.config["STORAGE_DIR"]
+    tmp_dir = root / ".tmp"
+    tmp_dir.mkdir(mode=0o700, exist_ok=True)
+    return tmp_dir / f"{time.time_ns()}_{os.getpid()}.upload"
+
+
+def _store(user_id: str, files: dict, photo_at: datetime, source: str,
+           lat: float | None, lng: float | None, original_file_name: str | None, status: str) -> UploadResult:
+    """크기별 바이트(image/thumb/mini)를 암호화 저장 → tracepic_photos INSERT (실패하면 쓴 파일을 지움)"""
+    cfg = current_app.config
     base_dt = photo_at.strftime("%Y%m%d")
     folder = Path(_user_dir_name(user_id)) / base_dt
     file_ts = str(time.time_ns())
@@ -131,7 +178,7 @@ def save_upload(user_id: str, data: bytes, original_file_name: str | None,
     salt = cfg["MASTER_SALT"]
     try:
         for kind in KINDS:
-            _write_private(paths[kind], crypto.encrypt_bytes(jpegs[kind], salt, user_id))
+            _write_private(paths[kind], crypto.encrypt_bytes(files[kind], salt, user_id))
         pic_id = photo_logic.create_photo(
             user_id, rel_path, photo_at, lat, lng,
             original_file_name=_clean_file_name(original_file_name), status=status,

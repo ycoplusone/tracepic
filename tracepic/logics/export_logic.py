@@ -18,7 +18,7 @@ import io
 import zipfile
 from datetime import datetime
 
-from ..utils import exif
+from ..utils import exif, video
 from ..utils.dates import validate_base_dt
 from . import daily_logic, note_logic, photo_file_logic, photo_logic, story_logic
 
@@ -99,13 +99,14 @@ def stream_zip(data: dict, with_exif: bool = True):
         rows = []
         for p in data["photos"]:
             stamp = _stamp(p["photo_at"], p["pic_id"])
-            path = f"photos/{p['base_dt']}/{stamp}.jpg"
             jpeg = photo_file_logic.read_row_image(p)
+            clip = jpeg is not None and video.is_webp(jpeg)       # 동영상 클립(움직이는 WebP)은 .webp, EXIF 없음
+            path = f"photos/{p['base_dt']}/{stamp}.{'webp' if clip else 'jpg'}"
             if jpeg is None:
                 missing.append(f"{p['pic_id']} ({p['photo_at']:%Y-%m-%d %H:%M}, {p['original_file_name'] or '-'})")
                 path = ""
             else:
-                if with_exif:
+                if with_exif and not clip:
                     lat, lng = (p["latitude"], p["longitude"]) if photo_logic.has_location(p) else (None, None)
                     jpeg = exif.with_exif(jpeg, p["photo_at"], lat, lng)
                 zf.writestr(_info(f"{root}/{path}", p["photo_at"]), jpeg, compress_type=zipfile.ZIP_STORED)
@@ -167,6 +168,7 @@ def _readme(data, missing, with_exif) -> str:
         "",
         "구성",
         "  photos/날짜/촬영시각_번호.jpg   사진 (웹용 크기 — 원본은 TracePic 에 보관하지 않습니다)",
+        "  photos/날짜/촬영시각_번호.webp  동영상 클립 (영상의 3~7초를 움직이는 WebP 로, 소리 없음)",
         "  diary/날짜.md                    일기 (마크다운)",
         "  notes/촬영시각_번호.md           사진 설명 (마크다운, 사진 파일과 이름이 같습니다)",
         "  photos.csv                       사진 목록 (촬영 시각·위치·상태·원본 파일명)",
