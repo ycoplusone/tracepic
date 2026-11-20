@@ -341,3 +341,6 @@ curl http://127.0.0.1:5555/health    # {"status":"ok","db":"ok"}
   - ffmetadata 출력에 `creation_time`이 빠지는 문제 → 입력 정보의 Metadata 블록도 함께 읽도록 수정
 - 사진/클립은 WebP 여부로 구분(응답 Content-Type, 백업 zip `.webp`)
 - 테스트 49항목 추가(`test_video`, 실제 ffmpeg 확인 포함), 기존 테스트 전체 재통과
+
+### 21회차 — 브라우저 아이콘
+- `static/img/favicon.svg`(초록 바탕 + 위치 핀·렌즈 + 점선 동선) 추가, `base.html`에 연결(모든 화면 적용)
