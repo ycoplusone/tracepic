@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}가입 신청 · TracePic{% endblock %}
+{% block main_class %}login-wrap{% endblock %}
+
+{% block content %}
+{# 가입 1단계: 메일(= 아이디)과 비밀번호 → 인증 메일 #}
+<section class="login-card">
+  <h1 class="brand-lg">가입 신청</h1>
+  <p class="sub">메일 인증 후 관리자가 승인하면 로그인할 수 있습니다.</p>
+  {% include "_flash.html" %}
+  <form method="post" action="{{ url_for('account.signup') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="email">메일 주소 <span class="muted small">(아이디로 사용)</span></label>
+    <input id="email" name="email" type="email" value="{{ email or '' }}" maxlength="50"
+           autocomplete="email" autocapitalize="off" required autofocus>
+    <label for="password">비밀번호 <span class="muted small">({{ min_len }}자 이상)</span></label>
+    <input id="password" name="password" type="password" minlength="{{ min_len }}" autocomplete="new-password" required>
+    <label for="password2">비밀번호 확인</label>
+    <input id="password2" name="password2" type="password" minlength="{{ min_len }}" autocomplete="new-password" required>
+    <button type="submit" class="btn-primary">인증 메일 받기</button>
+  </form>
+  <p class="login-links small"><a href="{{ url_for('auth.login') }}">로그인으로 돌아가기</a></p>
+</section>
+{% endblock %}

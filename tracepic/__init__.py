@@ -67,6 +67,8 @@ def _register_blueprints(app: Flask) -> None:
     from .routes.api import bp as api_bp
     from .routes.diary import bp as diary_bp
     from .routes.backup import bp as backup_bp
+    from .routes.account import bp as account_bp   # 가입 신청 · 비밀번호 찾기 (공개)
+    from .routes.admin import bp as admin_bp       # 관리자 (role = admin)
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
@@ -74,6 +76,8 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(diary_bp, url_prefix="/diary")
     app.register_blueprint(backup_bp, url_prefix="/backup")
+    app.register_blueprint(account_bp)
+    app.register_blueprint(admin_bp, url_prefix="/admin")
     # 다음 단계에서 추가 예정:
     # from .routes.note import bp as note_bp;   app.register_blueprint(note_bp,  url_prefix="/notes")
 
@@ -83,8 +87,9 @@ def _register_error_handlers(app: Flask) -> None:
 
     @app.errorhandler(413)
     def too_large(_e):
-        limit_mb = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
-        return jsonify(error=f"업로드 용량 초과 (최대 {limit_mb}MB)"), 413
+        photo_mb = app.config["MAX_PHOTO_BYTES"] // (1024 * 1024)
+        video_mb = app.config["MAX_VIDEO_BYTES"] // (1024 * 1024)
+        return jsonify(error=f"업로드 용량 초과 (사진 최대 {photo_mb}MB, 동영상 최대 {video_mb}MB)"), 413
 
     @app.errorhandler(404)
     def not_found(_e):

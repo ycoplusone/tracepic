@@ -61,3 +61,40 @@ CREATE TABLE IF NOT EXISTS `tracepic_daily` (
   PRIMARY KEY (`daily_id`),
   KEY `tracepic_photos_inx01` (`base_dt`,`user_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='일별 요약 MD문서';
+
+-- ------------------------------------------------------------
+-- tracepic_signup: 메일 가입 신청 (2026-11-20 사용자 확인 후 추가)
+--   메일 인증(V → P) → 관리자 승인(A) 순간에만 user_info 에 INSERT (user_id = email). 거절은 R.
+--   승인 전 신청자는 공유 테이블 user_info 에 없으므로 다른 서비스에 보이지 않는다.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `tracepic_signup` (
+  `signup_id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '가입 신청 고유 식별자',
+  `email` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '가입 메일 (승인 시 user_id 로 사용)',
+  `password` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'bcrypt 해시',
+  `status` varchar(1) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'V' COMMENT 'V:메일인증대기 P:승인대기 A:승인 R:거절',
+  `verified_at` datetime DEFAULT NULL COMMENT '메일 인증 시각',
+  `decided_at` datetime DEFAULT NULL COMMENT '승인·거절 시각',
+  `decided_by` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '승인·거절한 관리자 user_id',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '신청 시각',
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '최후 변경 시각',
+  PRIMARY KEY (`signup_id`),
+  KEY `tracepic_signup_inx01` (`email`),
+  KEY `tracepic_signup_inx02` (`status`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='메일 가입 신청';
+
+-- ------------------------------------------------------------
+-- tracepic_email_codes: 메일 인증 코드 (가입 S / 비밀번호 재설정 R) (2026-11-20 사용자 확인 후 추가)
+--   코드는 평문으로 저장하지 않고 HMAC-SHA256(SECRET_KEY) 값만 둔다. 10분 유효, 5회 틀리면 무효.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `tracepic_email_codes` (
+  `code_id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '인증 코드 고유 식별자',
+  `purpose` varchar(1) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'S:가입 R:비밀번호재설정',
+  `email` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '받는 메일',
+  `code_hash` char(64) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'HMAC-SHA256(코드)',
+  `attempts` tinyint unsigned NOT NULL DEFAULT '0' COMMENT '틀린 횟수',
+  `expires_at` datetime NOT NULL COMMENT '만료 시각',
+  `used_at` datetime DEFAULT NULL COMMENT '사용(인증 성공) 시각',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '발급 시각',
+  PRIMARY KEY (`code_id`),
+  KEY `tracepic_email_codes_inx01` (`email`, `purpose`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='메일 인증 코드';

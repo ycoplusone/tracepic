@@ -19,6 +19,7 @@
       <a class="nav-link" href="{{ url_for('main.story') }}">여행기</a>
       <a class="nav-link" href="{{ url_for('main.calendar_page') }}">달력</a>
       <a class="nav-link" href="{{ url_for('photo.upload_page') }}"><span class="hide-sm">사진 </span>올리기</a>
+      {% if g.user.role == 'admin' %}<a class="nav-link" href="{{ url_for('admin.index') }}">관리</a>{% endif %}
       <span class="who">{{ g.user.user_id }}</span>
       <form method="post" action="{{ url_for('auth.logout') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

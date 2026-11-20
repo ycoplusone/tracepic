@@ -8,14 +8,19 @@
 from flask import (Blueprint, current_app, flash, g, jsonify, redirect,
                    render_template, request, session, url_for)
 
-from ..logics import auth_logic
+from ..logics import account_logic, auth_logic
 from ..utils.login_throttle import login_throttle
 from ..utils.ttl_cache import TTLCache
 
 bp = Blueprint("auth", __name__)
 
 # 로그인 없이 접근 가능한 엔드포인트
-PUBLIC_ENDPOINTS = {"auth.login", "main.health", "static"}
+PUBLIC_ENDPOINTS = {
+    "auth.login", "main.health", "static",
+    # 메일 가입 신청 · 비밀번호 찾기 (routes/account.py)
+    "account.signup", "account.signup_verify", "account.signup_resend",
+    "account.password_forgot", "account.password_reset", "account.password_resend",
+}
 
 # 로그인 확인 결과 캐시: (user_id, device_token) → 사용자 정보
 # 지도 화면은 썸네일 수십 장을 한꺼번에 요청한다. 요청마다 user_devices 를 조회하지 않도록 AUTH_CACHE_SECONDS 동안 기억한다.
@@ -90,8 +95,15 @@ def login():
         for k in keys:
             login_throttle.record_fail(k)
         current_app.logger.info("로그인 실패: user_id=%s ip=%s", user_id, request.remote_addr)
-        # 아이디 존재 여부를 알 수 없도록 동일한 메시지 사용
-        flash("아이디 또는 비밀번호가 올바르지 않습니다.", "error")
+        # 비밀번호까지 맞는 가입 신청이 진행 중이면 그 상태를 알려 준다 (비밀번호가 틀리면 아래 공통 메시지)
+        waiting = account_logic.pending_status(user_id, password) if user_id and password else None
+        if waiting == "P":
+            flash("가입 신청이 관리자 승인을 기다리고 있습니다. 승인되면 메일로 알려 드립니다.", "error")
+        elif waiting == "V":
+            flash("가입 메일 인증이 끝나지 않았습니다. 가입 신청을 다시 해 주세요.", "error")
+        else:
+            # 아이디 존재 여부를 알 수 없도록 동일한 메시지 사용
+            flash("아이디 또는 비밀번호가 올바르지 않습니다.", "error")
         return render_template("login.html", next=next_url, user_id=user_id), 401
 
     # ── 성공: 토큰 발급 → 세션 저장 ──

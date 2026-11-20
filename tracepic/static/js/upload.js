@@ -1,6 +1,7 @@
 // 사진 업로드 화면 스크립트
 // - 선택(또는 끌어다 놓은) 파일을 한 장씩 POST /photos/upload 로 보낸다 (동시에 최대 2장).
 // - 파일마다 진행률·결과(촬영 시각, 위치 유무, 썸네일)를 목록에 보여 준다.
+// - 동영상(mp4·mov 등)은 서버가 3~7초 구간만 움직이는 WebP 로 바꿔 저장한다(영상은 보관 안 함). 다 올라간 뒤 '변환 중'을 보여 준다.
 // - CSRF 토큰은 <meta name="csrf-token"> 에서 읽어 X-CSRF-Token 헤더로 보낸다.
 (function () {
   "use strict";
@@ -47,8 +48,13 @@
     for (const file of fileList) {
       const row = makeRow(file);
       stats.total += 1;
-      if (file.size > config.maxBytes) {
-        finish(row, false, `파일이 너무 큽니다 (최대 ${Math.round(config.maxBytes / 1048576)}MB)`);
+      const limit = isVideo(file) ? config.maxVideoBytes : config.maxBytes;
+      if (isVideo(file) && !config.videoSupported) {
+        finish(row, false, "이 서버에서는 동영상을 올릴 수 없습니다 (ffmpeg 없음)");
+        continue;
+      }
+      if (file.size > limit) {
+        finish(row, false, `파일이 너무 큽니다 (최대 ${Math.round(limit / 1048576)}MB)`);
         continue;
       }
       queue.push({ file, row });
@@ -77,6 +83,7 @@
       form.append("photo", file);
       form.append("status", statusSelect.value);
       form.append("client_time", localIso(file.lastModified)); // EXIF 시각이 없을 때 대신 쓸 값
+      form.append("tz_offset", String(-new Date().getTimezoneOffset())); // 동영상 UTC 촬영 시각 → 현지 시각용 (동쪽 +분)
 
       const xhr = new XMLHttpRequest();
       xhr.open("POST", config.uploadUrl);
@@ -87,6 +94,11 @@
       row.state.textContent = "올리는 중…";
       xhr.upload.addEventListener("progress", (e) => {
         if (e.lengthComputable) row.bar.value = Math.round((e.loaded / e.total) * 100);
+      });
+      // 다 올라간 뒤 서버가 처리하는 동안 (동영상은 WebP 변환에 수십 초 걸릴 수 있음)
+      xhr.upload.addEventListener("load", () => {
+        row.state.textContent = isVideo(file) ? "3~7초 구간을 움직이는 그림으로 변환 중…" : "처리 중…";
+        row.bar.removeAttribute("value");   // 진행률을 모를 때의 막대
       });
       xhr.addEventListener("load", () => {
         const data = xhr.response;
@@ -112,9 +124,10 @@
 
   // 성공 결과 설명: 촬영 시각(출처) + 위치 유무
   function describe(data) {
-    const source = { exif: "", file: " (파일 수정 시각)", upload: " (업로드 시각)" }[data.time_source] || "";
+    const source = { exif: "", meta: "", file: " (파일 수정 시각)", upload: " (업로드 시각)" }[data.time_source] || "";
     const place = data.latitude !== null ? "위치 있음" : "위치 없음";
-    return `${data.photo_at}${source} · ${place}`;
+    const clip = data.kind === "clip" ? "🎞 동영상 3~7초 · " : "";
+    return `${clip}${data.photo_at}${source} · ${place}`;
   }
 
   function makeRow(file) {
@@ -165,6 +178,13 @@
         ? `${stats.total}장 중 ${doneCount}장 처리됨…`
         : `완료: 성공 ${stats.ok}장${stats.fail ? `, 실패 ${stats.fail}장` : ""}`;
     doneActions.hidden = doneCount < stats.total;
+  }
+
+  // 동영상인지 (MIME 이 비어 있는 브라우저도 있어 확장자도 본다)
+  function isVideo(file) {
+    if (file.type && file.type.startsWith("video/")) return true;
+    const ext = (file.name.split(".").pop() || "").toLowerCase();
+    return config.videoExts.includes(ext);
   }
 
   // 밀리초 타임스탬프 → 사용자 기기 현지 시각 'YYYY-MM-DDTHH:MM:SS'

@@ -74,7 +74,11 @@ class BaseConfig:
     # 저장소·로그는 프로젝트 외부(형제 폴더)에 둔다 → 배포/재설치 시 데이터 보존, Git 오염 방지
     STORAGE_DIR = _resolve_dir("STORAGE_DIR", "tracepic_storage")
     LOG_DIR = _resolve_dir("LOG_DIR", "tracepic_logs")
-    MAX_CONTENT_LENGTH = int(os.getenv("MAX_UPLOAD_MB", "30")) * 1024 * 1024
+    MAX_PHOTO_BYTES = int(os.getenv("MAX_UPLOAD_MB", "30")) * 1024 * 1024        # 사진 1장 최대
+    MAX_VIDEO_BYTES = int(os.getenv("MAX_VIDEO_MB", "500")) * 1024 * 1024        # 동영상 1개 최대 (3~7초만 WebP 로 남김)
+    MAX_CONTENT_LENGTH = max(MAX_PHOTO_BYTES, MAX_VIDEO_BYTES) + 1024 * 1024      # 요청 전체 한도 (폼 필드 여유 1MB)
+    # 동영상 → WebP 변환에 쓰는 ffmpeg 경로. 비우면 PATH 의 ffmpeg → imageio-ffmpeg 순으로 찾는다 (utils/video.find_ffmpeg)
+    FFMPEG_PATH = os.getenv("FFMPEG_PATH", "")
     ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "heic", "webp"}
 
     # ── 이미지 리사이징 ──
@@ -88,6 +92,21 @@ class BaseConfig:
     LOGIN_MAX_FAILS = int(os.getenv("LOGIN_MAX_FAILS", "5"))        # 아이디당 허용 실패 횟수
     LOGIN_LOCK_MINUTES = int(os.getenv("LOGIN_LOCK_MINUTES", "10"))  # 초과 시 잠금 시간
     SESSION_COOKIE_NAME = "tracepic_session"
+
+    # ── 메일 발송 (SMTP, 현재 Brevo) ── 계정·키는 .env 에만. SMTP_HOST 가 비면 메일 대신 로그에 남긴다(개발용)
+    SMTP_HOST = os.getenv("SMTP_HOST", "")
+    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))           # 587 = STARTTLS, 465 = SSL (OCI 는 25 차단)
+    SMTP_USER = os.getenv("SMTP_USER", "")
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+    MAIL_FROM = os.getenv("MAIL_FROM", "")
+    PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")  # 메일 속 링크용 (예: http://서버IP). 비면 링크 생략
+
+    # ── 메일 인증 (가입 / 비밀번호 재설정) ──
+    EMAIL_CODE_MINUTES = int(os.getenv("EMAIL_CODE_MINUTES", "10"))           # 코드 유효 시간
+    EMAIL_CODE_MAX_TRIES = int(os.getenv("EMAIL_CODE_MAX_TRIES", "5"))        # 이만큼 틀리면 그 코드는 무효
+    EMAIL_CODE_RESEND_SECONDS = int(os.getenv("EMAIL_CODE_RESEND_SECONDS", "60"))  # 같은 메일 재발송 간격
+    EMAIL_CODE_HOURLY_MAX = int(os.getenv("EMAIL_CODE_HOURLY_MAX", "5"))      # 같은 메일·용도로 1시간에 보낼 수 있는 수
+    PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", "8"))          # 새 비밀번호 최소 길이
 
     # ── 세션 쿠키 보안 ──
     SESSION_COOKIE_HTTPONLY = True

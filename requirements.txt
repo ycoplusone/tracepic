@@ -17,3 +17,7 @@ nh3>=0.2.18                      # 변환된 HTML XSS 살균(sanitize)
 
 # ── 운영 배포 (Oracle Cloud Linux) ─────────────
 gunicorn>=23.0                   # WSGI 서버 (Nginx 리버스 프록시 뒤에서 실행)
+
+# ── 동영상 → WebP 클립 (선택) ──────────────────
+# ffmpeg 는 pip 패키지가 아니라 시스템 프로그램: 서버에서 `sudo apt install ffmpeg` (없으면 동영상 업로드만 꺼짐)
+# apt 를 쓸 수 없으면 대신 `pip install imageio-ffmpeg` (ffmpeg 실행 파일을 함께 받아 옴 — 자동으로 찾음)
