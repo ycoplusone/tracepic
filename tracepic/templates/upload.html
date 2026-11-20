@@ -23,8 +23,11 @@
 
 {# 파일 선택 / 끌어다 놓기 영역 — 키보드로도 선택할 수 있게 label 로 감싼다 #}
 <label id="dropzone" class="dropzone" for="file-input">
+  {# accept 는 와일드카드(image/*, video/*)만 쓴다: 안드로이드는 이때만 휴대폰 사진첩(사진 선택 도구)을 열고,
+     확장자·세부 형식을 섞으면 파일 탐색기(구글 드라이브 등 최근 파일)가 먼저 열린다.
+     지원하지 않는 형식은 서버가 거부한다(형식 확인은 서버 몫). #}
   <input id="file-input" type="file" multiple
-         accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif{% if video_supported %},video/mp4,video/quicktime,{% for e in video_exts %}.{{ e }}{{ ',' if not loop.last }}{% endfor %}{% endif %}">
+         accept="image/*{% if video_supported %},video/*{% endif %}">
   <strong>사진{% if video_supported %}·동영상{% endif %}을 여기에 끌어다 놓거나 눌러서 선택하세요</strong>
   <span class="muted small">여러 장을 한 번에 올릴 수 있습니다</span>
 </label>
