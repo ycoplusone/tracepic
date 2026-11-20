@@ -99,9 +99,11 @@ def _make_dirs(path: Path) -> None:
 # ============================================================
 def save_upload(user_id: str, data: bytes, original_file_name: str | None,
                 client_time: datetime | None = None,
-                status: str = photo_logic.STATUS_PRIVATE) -> UploadResult:
+                status: str = photo_logic.STATUS_PRIVATE,
+                gps_hint: tuple[float, float] | None = None) -> UploadResult:
     """
     업로드된 이미지 1장을 암호화 저장하고 DB 에 등록
+    - gps_hint: 파일에 GPS 가 없을 때만 쓰는 보조 좌표 (앱이 원본에서 따로 읽어 보낸 값)
     - 이미지 문제는 image.ImageError, 잘못된 입력은 ValueError 로 알린다 (메시지는 사용자에게 보여 줘도 됨).
     """
     cfg = current_app.config
@@ -113,7 +115,7 @@ def save_upload(user_id: str, data: bytes, original_file_name: str | None,
         photo_at, source = client_time, "file"
     if photo_at is None:
         photo_at, source = datetime.now().replace(microsecond=0), "upload"
-    gps = exif.extract_gps(img)
+    gps = exif.extract_gps(img) or gps_hint
     lat, lng = gps if gps else (None, None)
 
     # ── 웹용 JPEG + 썸네일 + 마커용 (회전·색 정리는 한 번만) ──
@@ -128,7 +130,8 @@ def save_upload(user_id: str, data: bytes, original_file_name: str | None,
 
 def save_video_upload(user_id: str, src_path: Path, original_file_name: str | None,
                       client_time: datetime | None = None, tz_minutes: int | None = None,
-                      status: str = photo_logic.STATUS_PRIVATE) -> UploadResult:
+                      status: str = photo_logic.STATUS_PRIVATE,
+                      gps_hint: tuple[float, float] | None = None) -> UploadResult:
     """
     동영상 → 3~7초 구간 움직이는 WebP 3개를 암호화 저장하고 DB 에 등록 (동영상 자체는 저장하지 않음)
     - src_path 는 호출한 쪽이 STORAGE_DIR/.tmp 에 잠깐 쓴 업로드 파일이다. 지우는 것도 호출한 쪽이 한다.
@@ -145,7 +148,7 @@ def save_video_upload(user_id: str, src_path: Path, original_file_name: str | No
         photo_at, source = client_time, "file"
     if photo_at is None:
         photo_at, source = datetime.now().replace(microsecond=0), "upload"
-    gps = video.parse_location(tags)
+    gps = video.parse_location(tags) or gps_hint      # 메타데이터에 없을 때만 앱이 보낸 좌표
     lat, lng = gps if gps else (None, None)
 
     start, length = video.clip_window(duration)

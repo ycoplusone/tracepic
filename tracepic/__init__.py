@@ -69,6 +69,7 @@ def _register_blueprints(app: Flask) -> None:
     from .routes.backup import bp as backup_bp
     from .routes.account import bp as account_bp   # 가입 신청 · 비밀번호 찾기 (공개)
     from .routes.admin import bp as admin_bp       # 관리자 (role = admin)
+    from .routes.app_api import bp as app_api_bp   # 휴대폰 업로드 앱 (device_token 인증)
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
@@ -78,6 +79,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(backup_bp, url_prefix="/backup")
     app.register_blueprint(account_bp)
     app.register_blueprint(admin_bp, url_prefix="/admin")
+    app.register_blueprint(app_api_bp, url_prefix="/api/app")
     # 다음 단계에서 추가 예정:
     # from .routes.note import bp as note_bp;   app.register_blueprint(note_bp,  url_prefix="/notes")
 

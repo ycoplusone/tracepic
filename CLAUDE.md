@@ -56,6 +56,15 @@
   - 배포할 때 **ProxyFix**를 적용합니다. 그래야 로그인 실패 제한이 실제 클라이언트 IP로 동작합니다.
   - 로그인 실패 제한은 메모리 기반이라 gunicorn 워커마다 따로 집계됩니다.
 
+## 앱 API — 휴대폰 업로드 앱 (`/api/app/*`, 2026-11-20)
+- 배경: 안드로이드는 휴대폰 안의 사진을 브라우저에 넘길 때 GPS를 지웁니다(크롬에 '미디어 위치 접근' 권한 없음). 그래서 권한을 받는 전용 앱이 원본을 보내는 경로를 만듭니다.
+- `routes/app_api.py`(블루프린트 `app_api`):
+  - `POST /login`: JSON/폼 `user_id`, `password`, `device_name` → `{ok, user_id, device_token, expires_days}`. 웹 로그인과 같은 bcrypt 검증, 실패 횟수 제한, 승인 대기 안내를 씁니다. 토큰은 `user_devices`에 INSERT(user_agent `TracePic App (기기 이름)`).
+  - `GET /me`(토큰 확인), `POST /upload`(웹 업로드와 같은 `photo.handle_upload`), `POST /logout`(이 토큰만 DELETE).
+- 인증: 헤더 `X-User-Id` + `Authorization: Bearer <device_token>`(권장), 또는 폼 필드 `user_id`, `device_token`. `require_login`이 이 블루프린트는 **토큰으로만** 확인하고 세션은 읽지도 쓰지도 않습니다. 쿠키로 인증되지 않으므로 CSRF 검사에서 뺍니다(`utils/csrf.py`). 세션 쿠키만 있는 요청은 401입니다.
+- 업로드 보조 값: `latitude`/`longitude`는 파일에 GPS가 없을 때만 씁니다(0,0·범위 밖은 무시). 앱이 줄여 보내거나 EXIF가 빠질 때를 위한 값입니다.
+- ⚠️ 비밀번호와 토큰이 오가므로 **실사용은 HTTPS에서만** 합니다. 중복 업로드 방지(원본 해시)는 아직 없습니다(DDL 필요 — 사용자 확인 후).
+
 ## 동영상 → 움직이는 WebP 클립 (2026-11-20)
 - **동영상 자체는 보관하지 않습니다.** 업로드한 영상의 **3~7초 구간(4초)**만 잘라 움직이는 WebP 3개(image 짧은 변 720px / thumb 긴 변 400px / mini 128px 정사각형, 10fps, 소리 없음)를 만들어 사진과 같은 자리(`.enc`/`.thumb.enc`/`.mini.enc`)에 암호화 저장합니다. DB 구조·지도·필름·크게 보기는 사진과 같습니다(`<img>`로 재생).
   - 7초보다 짧으면 끝 4초, 4초보다 짧으면 전부를 씁니다(`video.clip_window`).
@@ -214,6 +223,7 @@
 - [x] user_info 비밀번호 bcrypt 일괄 변환 (2026-11-20, 5명)
 - [x] 메일 가입 신청(인증 코드) · 관리자 승인 화면 · 비밀번호 찾기 (2026-11-20, 테스트 62항목 통과)
 - [x] 동영상 업로드 → 3~7초 움직이는 WebP 클립 3종 (2026-11-20, 실제 ffmpeg 포함 테스트 49항목 통과, 사용자 실제 영상 확인 — 위치·촬영 시각 추출 정상)
+- [x] 앱 API: 앱 로그인(device_token 발급)·업로드·로그아웃 (2026-11-20, 테스트 28항목 통과)
 - [ ] 배포 (Nginx, systemd, gunicorn) — **HTTPS는 보류 (2026-11-13 사용자 결정, 기능 개발 우선)**. 배포할 때 Nginx + Let's Encrypt + ProxyFix로 진행할 예정
 
 ## Git 커밋 규칙

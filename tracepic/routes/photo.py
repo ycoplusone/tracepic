@@ -53,7 +53,16 @@ def upload_page():
 @bp.post("/upload")
 def upload():
     """사진 1장 업로드 — 성공하면 200 + 사진 정보, 실패하면 400 + error 메시지"""
-    file = request.files.get("photo")
+    return handle_upload(request.files.get("photo"))
+
+
+def handle_upload(file):
+    """
+    업로드 1건 처리 (웹 /photos/upload 와 앱 /api/app/upload 가 같이 쓴다)
+    - 호출 전에 g.user 가 정해져 있어야 한다 (웹: 세션, 앱: device_token).
+    - 폼 값: status, client_time(파일 시각), tz_offset(동영상 UTC 시각 변환용),
+      latitude/longitude(파일에 GPS 가 없을 때만 쓰는 보조 좌표 — 앱이 따로 읽어 보낸 값)
+    """
     if file is None or not file.filename:
         return jsonify(ok=False, error="파일이 없습니다."), 400
 
@@ -66,12 +75,13 @@ def upload():
 
     client_time = _parse_client_time(request.form.get("client_time"))
     status = request.form.get("status") or photo_logic.STATUS_PRIVATE
+    gps_hint = _parse_gps(request.form.get("latitude"), request.form.get("longitude"))
     try:
         if is_video:
-            result = _save_video(file, client_time, status)
+            result = _save_video(file, client_time, status, gps_hint)
         else:
             result = photo_file_logic.save_upload(g.user["user_id"], file.read(), file.filename,
-                                                  client_time=client_time, status=status)
+                                                  client_time=client_time, status=status, gps_hint=gps_hint)
     except (ImageError, video.VideoError) as e:
         return jsonify(ok=False, error=str(e)), 400
     except ValueError as e:
@@ -94,7 +104,7 @@ def upload():
     )
 
 
-def _save_video(file, client_time, status):
+def _save_video(file, client_time, status, gps_hint=None):
     """업로드 동영상을 STORAGE_DIR/.tmp 에 잠깐 쓰고(0600) WebP 클립으로 바꾼 뒤 바로 지운다"""
     tmp = photo_file_logic.temp_upload_path()
     try:
@@ -103,10 +113,21 @@ def _save_video(file, client_time, status):
             shutil.copyfileobj(file.stream, f, 1024 * 1024)       # 메모리에 다 올리지 않고 1MB 씩
         return photo_file_logic.save_video_upload(
             g.user["user_id"], tmp, file.filename, client_time=client_time,
-            tz_minutes=_parse_tz(request.form.get("tz_offset")), status=status,
+            tz_minutes=_parse_tz(request.form.get("tz_offset")), status=status, gps_hint=gps_hint,
         )
     finally:
         tmp.unlink(missing_ok=True)
+
+
+def _parse_gps(lat: str | None, lng: str | None) -> tuple[float, float] | None:
+    """보조 좌표(십진수 도). 둘 다 있고 범위 안이며 0,0(GPS 없음 표시)이 아닐 때만 쓴다"""
+    try:
+        la, lo = float(lat), float(lng)
+    except (TypeError, ValueError):
+        return None
+    if not (-90 <= la <= 90 and -180 <= lo <= 180) or (la == 0 and lo == 0) or la != la or lo != lo:
+        return None
+    return round(la, 7), round(lo, 7)
 
 
 def _parse_tz(value: str | None) -> int | None:

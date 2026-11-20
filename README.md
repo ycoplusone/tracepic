@@ -361,3 +361,11 @@ curl http://127.0.0.1:5555/health    # {"status":"ok","db":"ok"}
 ### 25회차 — 업로드 두 번째 버튼을 '드라이브·클라우드에서 선택'으로
 - 원인 확인: 안드로이드는 휴대폰 안의 사진(사진첩·파일 앱 모두)을 브라우저에 넘길 때 위치를 지움. 구글 드라이브 등 클라우드에서 고르면 원본 그대로 넘어와 위치 유지(사용자 확인)
 - 버튼 이름·안내 문구를 이에 맞게 변경
+
+### 26회차 — 휴대폰 업로드 앱용 API
+- `routes/app_api.py` (`/api/app/*`, 쿠키 없이 device_token 으로 인증)
+  - `POST /login`: user_id·password(·device_name) → `device_token` 발급(user_devices INSERT). 웹 로그인과 같은 검증·실패 제한
+  - `POST /upload`: 사진·동영상 1건, 웹 업로드와 같은 처리(`photo.handle_upload`로 공용화). 파일에 GPS가 없을 때만 쓰는 보조 좌표(`latitude`/`longitude`)
+  - `GET /me`(토큰 확인), `POST /logout`(이 토큰만 삭제)
+  - 인증: `X-User-Id` + `Authorization: Bearer` 헤더 또는 폼 `user_id`·`device_token`. 세션은 쓰지 않으므로 CSRF 검사 제외(세션 쿠키만 있는 요청은 401)
+- 테스트 28항목 추가(`test_app_api`, 실제 user_info·user_devices 검증, 롤백), 기존 테스트 재통과
