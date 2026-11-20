@@ -14,6 +14,9 @@
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"
         integrity="sha256-Hk4dIpcqOSb0hZjgyvFOP+cEmDXUKKNE/tT542ZbNQg=" crossorigin="" defer></script>
+{# 마크다운 편집기 OverType — 버전 고정 + SRI (static/js/mdedit.js 가 textarea 를 바꿔 끼움) #}
+<script src="https://cdn.jsdelivr.net/npm/overtype@2.7.0/dist/overtype.min.js"
+        integrity="sha384-Yzuck0R0V2vKvkdSnwQV7uFioq8cMhdToxsOneIz88WLK1KUxiuoWXgIuVdF6vUu" crossorigin="anonymous" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -183,5 +186,6 @@
        "defaultStatuses": default_statuses|list,
      }|tojson }}
 </script>
+<script src="{{ url_for('static', filename='js/mdedit.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/map.js') }}" defer></script>
 {% endblock %}

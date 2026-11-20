@@ -289,3 +289,14 @@ body:has(.diary-main) { display: flex; flex-direction: column; height: 100dvh; o
   .sheet > form.s-form, .s-results { padding-left: 16px; padding-right: 16px; }
   .hud-actions .hud-btn { padding-left: 12px; padding-right: 12px; }
 }
+
+/* ── 마크다운 편집기 (OverType, static/js/mdedit.js) — 원래 .e-note 자리 ── */
+.e-note-box {
+  margin: 0 26px; height: 42dvh; min-height: 220px; display: flex; flex-direction: column;
+  border: 1px solid #d5dbe5; border-radius: 6px; overflow: hidden; background: #fff;
+}
+.e-note-box:focus-within { outline: 2px solid #8fa3c4; outline-offset: 0; border-color: transparent; }
+.e-note-box > .overtype-container { flex: 1; min-height: 0; height: 100%; }
+@media (max-width: 720px) {
+  .e-note-box { margin: 0 16px; flex: 1; height: auto; min-height: 0; }
+}

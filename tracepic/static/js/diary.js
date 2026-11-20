@@ -464,7 +464,9 @@
   // - 어느 경우든 대상 날짜에 다른 기록이 있으면 서버가 409 로 막는다 (덮어쓰기 방지).
   // ============================================================
   const editor = $("editor");
-  const eDate = $("e-date"), eTitle = $("e-title"), eNote = $("e-note");
+  const eDate = $("e-date"), eTitle = $("e-title");
+  // 본문: OverType 마크다운 편집기 (static/js/mdedit.js, 못 불러오면 원래 textarea). 일기 창은 늘 밝은 종이라 solar 테마
+  const eNote = window.TPMd ? TPMd.attach($("e-note"), { theme: "solar", className: "e-note-box" }) : $("e-note");
   const notice = $("e-notice");
   let editing = null;     // 고치는 중인 기록의 원래 날짜(base_dt), 새 기록이면 null
   let savedSnapshot = ""; // 마지막으로 불러온/저장한 내용 — 바뀌었는지 확인용
