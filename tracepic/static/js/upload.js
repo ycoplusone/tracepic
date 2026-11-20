@@ -21,10 +21,14 @@
   let stats = { total: 0, ok: 0, fail: 0 };
 
   // ── 파일 선택 / 끌어다 놓기 ──
-  input.addEventListener("change", () => {
-    addFiles(input.files);
-    input.value = ""; // 같은 파일을 다시 고를 수 있게 초기화
-  });
+  // 사진첩(#file-input) · 파일 탐색기(#file-input-raw, 위치 유지용) 두 입력을 같은 방식으로 처리
+  for (const el of [input, document.getElementById("file-input-raw")]) {
+    if (!el) continue;
+    el.addEventListener("change", () => {
+      addFiles(el.files);
+      el.value = ""; // 같은 파일을 다시 고를 수 있게 초기화
+    });
+  }
   ["dragenter", "dragover"].forEach((type) =>
     dropzone.addEventListener(type, (e) => {
       e.preventDefault();
