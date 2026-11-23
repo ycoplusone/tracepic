@@ -100,7 +100,7 @@ def stream_zip(data: dict, with_exif: bool = True):
         for p in data["photos"]:
             stamp = _stamp(p["photo_at"], p["pic_id"])
             jpeg = photo_file_logic.read_row_image(p)
-            clip = jpeg is not None and video.is_webp(jpeg)       # 동영상 클립(움직이는 WebP)은 .webp, EXIF 없음
+            clip = jpeg is not None and video.is_webp(jpeg)       # WebP(동영상 클립·WebP 로 올린 사진)는 .webp, EXIF 없음
             path = f"photos/{p['base_dt']}/{stamp}.{'webp' if clip else 'jpg'}"
             if jpeg is None:
                 missing.append(f"{p['pic_id']} ({p['photo_at']:%Y-%m-%d %H:%M}, {p['original_file_name'] or '-'})")
@@ -168,7 +168,7 @@ def _readme(data, missing, with_exif) -> str:
         "",
         "구성",
         "  photos/날짜/촬영시각_번호.jpg   사진 (웹용 크기 — 원본은 TracePic 에 보관하지 않습니다)",
-        "  photos/날짜/촬영시각_번호.webp  동영상 클립 (영상의 3~7초를 움직이는 WebP 로, 소리 없음)",
+        "  photos/날짜/촬영시각_번호.webp  WebP 로 올린 사진·동영상 클립(영상의 3~7초, 소리 없음) — EXIF 없음, 시각·위치는 photos.csv",
         "  diary/날짜.md                    일기 (마크다운)",
         "  notes/촬영시각_번호.md           사진 설명 (마크다운, 사진 파일과 이름이 같습니다)",
         "  photos.csv                       사진 목록 (촬영 시각·위치·상태·원본 파일명)",

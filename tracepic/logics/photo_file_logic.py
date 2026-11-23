@@ -18,7 +18,9 @@
 동영상 (save_video_upload, 2026-11-20)
 - 동영상은 보관하지 않고 3~7초 구간만 움직이는 WebP 3개(image 720p / thumb 400 / mini 128)로 만들어
   사진과 똑같은 자리(.enc / .thumb.enc / .mini.enc)에 저장한다 → DB 구조·화면은 사진과 같다(<img> 로 재생됨).
-- 사진인지 클립인지는 복호화한 내용(WebP 여부)으로 구분한다 (utils/video.is_webp).
+- 응답 Content-Type·백업 확장자는 복호화한 내용(WebP 여부)으로 정한다 (utils/video.is_webp).
+- WebP 로 올린 사진은 JPEG 로 바꾸지 않고 세 크기 모두 WebP 로 저장한다 (움직이면 클립, 아니면 정지 WebP).
+- 움직이는 WebP 사진도 같은 규칙(앞 4초, 10fps, 720/400/128)으로 클립으로 저장한다 (save_upload, 2026-11-23). ffmpeg 는 필요 없다.
 - ffmpeg 가 파일을 앞뒤로 오가며 읽어야 해서 업로드 영상을 STORAGE_DIR/.tmp(0700)에 잠깐 쓰고, 변환이 끝나면 바로 지운다.
 """
 import hashlib
@@ -50,6 +52,7 @@ class UploadResult:
     time_source: str          # 'exif' | 'meta'(동영상) | 'filename' | 'file' | 'upload' — 촬영 시각을 어디서 얻었는지
     latitude: float | None
     longitude: float | None
+    animated: bool = False    # 움직이는 WebP 클립으로 저장했는지 (동영상·움직이는 WebP 사진)
 
 
 # ============================================================
@@ -120,14 +123,22 @@ def save_upload(user_id: str, data: bytes, original_file_name: str | None,
     gps = exif.extract_gps(img) or gps_hint
     lat, lng = gps if gps else (None, None)
 
-    # ── 웹용 JPEG + 썸네일 + 마커용 (회전·색 정리는 한 번만) ──
+    # ── 움직이는 WebP: 동영상 클립과 같은 규칙(최대 4초, 10fps)으로 움직이는 WebP 3개 ──
+    if video.is_animated(img):
+        frames = video.frames_from_animation(img)
+        webps = {kind: video.to_webp(frames, kind) for kind in KINDS}
+        return _store(user_id, webps, photo_at, source, lat, lng, original_file_name, status, animated=True)
+
+    # ── 웹용 + 썸네일 + 마커용 (회전·색 정리는 한 번만) ──
+    #    WebP 로 올린 사진은 세 크기 모두 WebP 그대로, 나머지(JPEG·PNG·HEIC)는 JPEG
+    fmt = "WEBP" if img.format == "WEBP" else "JPEG"
     rgb = image.normalize(img)
-    jpegs = {
-        "image": image.to_jpeg(rgb, cfg["IMAGE_MAX_SIDE"], cfg["IMAGE_JPEG_QUALITY"]),
-        "thumb": image.to_jpeg(rgb, image.THUMB_SIDE, 80),
-        "mini": image.to_square_jpeg(rgb, image.MINI_SIDE, 75),
+    files = {
+        "image": image.to_jpeg(rgb, cfg["IMAGE_MAX_SIDE"], cfg["IMAGE_JPEG_QUALITY"], fmt),
+        "thumb": image.to_jpeg(rgb, image.THUMB_SIDE, 80, fmt),
+        "mini": image.to_square_jpeg(rgb, image.MINI_SIDE, 75, fmt),
     }
-    return _store(user_id, jpegs, photo_at, source, lat, lng, original_file_name, status)
+    return _store(user_id, files, photo_at, source, lat, lng, original_file_name, status)
 
 
 def save_video_upload(user_id: str, src_path: Path, original_file_name: str | None,
@@ -158,7 +169,7 @@ def save_video_upload(user_id: str, src_path: Path, original_file_name: str | No
     start, length = video.clip_window(duration)
     frames = video.extract_frames(ffmpeg, src_path, start, length)
     webps = {kind: video.to_webp(frames, kind) for kind in KINDS}
-    return _store(user_id, webps, photo_at, source, lat, lng, original_file_name, status)
+    return _store(user_id, webps, photo_at, source, lat, lng, original_file_name, status, animated=True)
 
 
 def temp_upload_path() -> Path:
@@ -170,7 +181,8 @@ def temp_upload_path() -> Path:
 
 
 def _store(user_id: str, files: dict, photo_at: datetime, source: str,
-           lat: float | None, lng: float | None, original_file_name: str | None, status: str) -> UploadResult:
+           lat: float | None, lng: float | None, original_file_name: str | None, status: str,
+           animated: bool = False) -> UploadResult:
     """크기별 바이트(image/thumb/mini)를 암호화 저장 → tracepic_photos INSERT (실패하면 쓴 파일을 지움)"""
     cfg = current_app.config
     base_dt = photo_at.strftime("%Y%m%d")
@@ -196,7 +208,7 @@ def _store(user_id: str, files: dict, photo_at: datetime, source: str,
             p.unlink(missing_ok=True)
         raise
 
-    return UploadResult(pic_id, base_dt, photo_at, source, lat, lng)
+    return UploadResult(pic_id, base_dt, photo_at, source, lat, lng, animated)
 
 
 def _clean_file_name(name: str | None) -> str | None:
