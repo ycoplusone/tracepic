@@ -14,9 +14,7 @@
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"
         integrity="sha256-Hk4dIpcqOSb0hZjgyvFOP+cEmDXUKKNE/tT542ZbNQg=" crossorigin="" defer></script>
-{# 마크다운 편집기 OverType — 버전 고정 + SRI (static/js/mdedit.js 가 textarea 를 바꿔 끼움) #}
-<script src="https://cdn.jsdelivr.net/npm/overtype@2.7.0/dist/overtype.min.js"
-        integrity="sha384-Yzuck0R0V2vKvkdSnwQV7uFioq8cMhdToxsOneIz88WLK1KUxiuoWXgIuVdF6vUu" crossorigin="anonymous" defer></script>
+{# 마크다운 편집기 OverType 는 여기서 불러오지 않는다 — 설명 '쓰기'를 처음 누를 때 mdedit.js(TPMd.load)가 SRI 를 붙여 불러온다 #}
 {% endblock %}
 
 {% block content %}
@@ -68,7 +66,8 @@
 
   <div class="map-wrap">
     <div id="map" class="map" role="application" aria-label="사진 지도"></div>
-    {# 촬영 순서 필름 — 조회된 사진을 촬영 시각순으로 번호와 함께 보여 준다 (위치 없는 사진 포함) #}
+    {# 촬영 순서 필름 — 조회된 사진을 최근 것부터 번호(촬영순)와 함께 보여 준다 (위치 없는 사진 포함).
+       화면 근처 칸만 만들고 나머지는 빈 여백으로 둔다(map.js renderFilmWindow) #}
     <div id="film" class="film" role="list" aria-label="촬영 순서" hidden></div>
   </div>
 </div>
@@ -78,8 +77,8 @@
   <div class="pv">
     <div class="pv-stage">
       <img id="pv-img" alt="">
-      <button type="button" id="pv-prev" class="pv-nav prev" aria-label="이전 사진 (촬영순)">‹</button>
-      <button type="button" id="pv-next" class="pv-nav next" aria-label="다음 사진 (촬영순)">›</button>
+      <button type="button" id="pv-prev" class="pv-nav prev" aria-label="이전 사진 (더 최근)">‹</button>
+      <button type="button" id="pv-next" class="pv-nav next" aria-label="다음 사진 (더 이전)">›</button>
       <span id="pv-count" class="pv-count"></span>
     </div>
 
@@ -178,6 +177,9 @@
        "datesUrl": url_for("api.photo_dates"),
        "photosUrl": url_for("api.map_photos"),
        "photoUrl0": url_for("api.photo_detail", pic_id=0),
+       "imageUrl0": url_for("photo.image", pic_id=0),
+       "thumbUrl0": url_for("photo.thumb", pic_id=0),
+       "miniUrl0": url_for("photo.mini", pic_id=0),
        "previewUrl": url_for("api.markdown_preview"),
        "diaryApi": url_for("api.diary_list"),
        "diaryPage": url_for("diary.index"),

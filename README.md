@@ -369,3 +369,12 @@ curl http://127.0.0.1:5555/health    # {"status":"ok","db":"ok"}
   - `GET /me`(토큰 확인), `POST /logout`(이 토큰만 삭제)
   - 인증: `X-User-Id` + `Authorization: Bearer` 헤더 또는 폼 `user_id`·`device_token`. 세션은 쓰지 않으므로 CSRF 검사 제외(세션 쿠키만 있는 요청은 401)
 - 테스트 28항목 추가(`test_app_api`, 실제 user_info·user_devices 검증, 롤백), 기존 테스트 재통과
+
+### 27회차 — 지도 화면 메모리 줄이기 + 필름 최근순
+- 필름(촬영 순서)과 크게 보기의 이전/다음을 **최근 사진부터** 보여 줌. 번호는 촬영 순서 그대로
+- 필름: 화면 근처 칸만 버튼으로 만들고 나머지는 여백으로 둠(칸 폭 고정 `--film-item-w`/`--film-day-w`). 사진 수천 장이어도 버튼은 수십 개
+- 마커: 그림(DOM)을 지도에 올라갈 때 만들고(`PhotoIcon`), markercluster `chunkedLoading`. 선택 강조는 이전·새 사진 두 개만 바꿈
+- 지도 타일: `keepBuffer: 1`, `updateWhenIdle: true` (화면 밖 여분 타일 줄임)
+- `/api/map-photos`: 이미지 주소 3개를 빼고 화면이 pic_id 로 만듦 → 4,926장 기준 응답 1.3MB → 845KB, 서버 변환 171ms → 30ms
+- 지도 화면의 OverType 편집기는 '쓰기'를 처음 누를 때 불러옴(`TPMd.load`, 같은 버전·SRI)
+- 지도·크게 보기·여행기·일기 테스트 재통과

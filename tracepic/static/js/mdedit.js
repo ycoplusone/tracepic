@@ -4,6 +4,8 @@
      (value / hidden / focus / addEventListener)를 돌려준다. 그래서 diary.js · map.js 는
      textarea 를 쓰던 코드를 거의 그대로 쓴다.
    - OverType 스크립트를 못 불러오면 원래 textarea 를 그대로 돌려준다(그냥 글자 입력).
+   - 지도 화면처럼 편집을 가끔 쓰는 곳은 TPMd.load() 로 처음 쓸 때 스크립트를 불러온다(메모리 절약).
+     일기 화면은 템플릿에서 미리 불러온다. 어느 쪽이든 같은 버전·같은 SRI 해시다.
    - 저장 형식은 그대로 마크다운 글자이고, 미리보기·화면 표시는 계속 서버(utils/md.render, nh3)가 만든다.
    ============================================================ */
 (function () {
@@ -30,6 +32,28 @@
    * @param {object} opts { theme: "solar" | "cave" | "auto", className: 편집기 상자에 붙일 클래스 }
    * @returns textarea 처럼 쓸 수 있는 객체 (실패하면 textarea 그대로)
    */
+  // OverType 스크립트 — 버전 고정 + SRI (diary.html 의 <script> 태그와 같은 값으로 유지)
+  const OT_SRC = "https://cdn.jsdelivr.net/npm/overtype@2.7.0/dist/overtype.min.js";
+  const OT_SRI = "sha384-Yzuck0R0V2vKvkdSnwQV7uFioq8cMhdToxsOneIz88WLK1KUxiuoWXgIuVdF6vUu";
+  let loading = null;
+
+  /** OverType 를 한 번만 불러온다. 이미 있으면 바로 끝. 실패하면 reject (다음 호출 때 다시 시도) */
+  function load() {
+    if (typeof window.OverType === "function") return Promise.resolve();
+    if (!loading) {
+      loading = new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = OT_SRC;
+        s.integrity = OT_SRI;
+        s.crossOrigin = "anonymous";
+        s.onload = () => resolve();
+        s.onerror = () => { loading = null; s.remove(); reject(new Error("편집기 스크립트를 불러오지 못했습니다.")); };
+        document.head.append(s);
+      });
+    }
+    return loading;
+  }
+
   function attach(textarea, opts = {}) {
     if (!textarea || typeof window.OverType !== "function") return textarea;
 
@@ -74,5 +98,5 @@
     };
   }
 
-  window.TPMd = { attach };
+  window.TPMd = { attach, load };
 })();

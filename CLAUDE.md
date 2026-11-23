@@ -166,6 +166,12 @@
 - 날짜 목록은 조회 기간 안에서 사진이 있는 날을 **일자별(오름차순)**로 보여 줍니다(`/api/photo-dates?start=&end=`). 날짜를 누르면 그날만 지도에 표시하고, 조회 기간은 그대로 둡니다. '기간 전체'나 같은 날을 다시 누르면 기간 전체로 돌아갑니다. '전체' 버튼은 사진이 있는 첫날~마지막 날로 기간을 넓힙니다.
 - 주소: `?start=&end=&day=&status=` (day는 고른 날, 없으면 기간 전체)
 - `/api/map-photos`는 위치 없는 사진도 촬영 시각순으로 함께 돌려줍니다(lat/lng = null). 지도에는 위치 있는 사진만 찍고, '촬영 순서 필름'에는 모두 보여 줍니다. 순번은 조회 결과 안에서 1부터 매깁니다.
+- 필름과 크게 보기의 이전/다음은 **최근 사진부터** 보여 줍니다(2026-11-23 사용자 결정). 순번은 촬영 순서 그대로라 맨 앞이 가장 큰 번호입니다. 서버는 계속 촬영순으로 주고 화면(`newestFirst`)이 뒤집습니다. 왼쪽 날짜 목록은 그대로 오름차순입니다.
+- **메모리 우선** (2026-11-23 사용자 결정 — 조금 늦어져도 메모리를 적게 씀):
+  - `/api/map-photos`는 이미지 주소를 보내지 않습니다(`_photo_json(urls=False)`). 화면이 `config.miniUrl0` 등의 `/0/`을 pic_id로 바꿔 만듭니다. 사진 상세·일기·여행기 JSON은 주소를 그대로 보냅니다.
+  - 필름은 화면 근처(앞뒤 한 화면)의 칸만 버튼으로 만들고 나머지는 `.film-pad` 여백으로 둡니다(`renderFilmWindow`). 그래서 칸 폭은 CSS 변수 `--film-item-w`, `--film-day-w`로 고정입니다. 필름 모양을 바꿀 때 이 두 값과 실제 폭이 맞아야 합니다.
+  - 마커 그림은 지도에 올라갈 때 만듭니다(`PhotoIcon.createIcon`). markercluster는 `chunkedLoading`. 선택 강조는 이전·새 사진 두 개만 바꿉니다.
+  - 타일은 `keepBuffer: 1`, `updateWhenIdle: true`. OverType는 지도 화면에서 '쓰기'를 처음 누를 때 `TPMd.load()`로 불러옵니다(같은 버전·SRI, `mdedit.js`에 상수).
 - 필름 키보드: Tab 정지점은 선택된 사진 하나뿐이고(roving tabindex, `syncTabStop`), 필름 안에서는 ← → / Home / End로 옮기며 Enter로 크게 봅니다. 방향키 이동은 위치 없는 사진이어도 크게 보기를 열지 않습니다(클릭만 바로 엽니다). 포커스가 아무 데도 없을 때(body)도 ← →가 필름을 넘기고, 입력칸·Leaflet 지도에 포커스가 있으면 그쪽에 맡깁니다.
 - 위치 찍기·수정: 크게 보기의 작은 지도(`#pv-loc-map`, 처음 열 때 생성)에서 누르거나 핀을 끌어 정하고 `PATCH /api/photos/<id>` `{"latitude","longitude"}`(둘 다 null = 지우기) → `photo_logic.update_location`으로 저장합니다. 상태와 위치는 한 요청에 같이 보내지 않습니다. 휴지통(D) 사진은 바꿀 수 없습니다. 저장 뒤에는 다시 조회하지 않고 `draw(photos, true)`로 그립니다.
 - 상태 변경은 `PATCH /api/photos/<id>` → `photo_logic.change_status`(A/B/C/D 사이 자유 이동, D→A/B/C가 복구)를 씁니다. 완전삭제(Z)는 파일 삭제가 함께 필요하므로 이 경로로는 할 수 없습니다.

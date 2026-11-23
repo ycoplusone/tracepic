@@ -220,21 +220,25 @@ body:has(.map-main) { display: flex; flex-direction: column; height: 100dvh; }
 .photo-popup .btn-link { text-align: left; }
 
 /* 촬영 순서 필름 (지도 아래쪽에 겹쳐 표시) */
+/* 칸 폭은 고정이다 — map.js 가 이 두 값으로 칸 위치를 계산해 화면 근처 칸만 만든다(칸 사이 간격도 폭에 포함, gap 0) */
 .film {
+  --film-item-w: 70px; --film-day-w: 24px;
   position: absolute; left: 12px; right: 12px; bottom: 24px; z-index: 500;
-  display: flex; align-items: flex-end; gap: 10px; overflow-x: auto; overscroll-behavior: contain;
+  display: flex; align-items: flex-end; gap: 0; overflow-x: auto; overscroll-behavior: contain;
   padding: 12px 12px 8px; border-radius: 12px;
   background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(6px);
   box-shadow: 0 2px 12px rgba(0,0,0,.25); scrollbar-width: thin;
 }
+.film-pad { flex: none; height: 1px; }
 .film-day {
-  flex: none; align-self: stretch; display: grid; place-items: center; padding: 0 2px 0 6px;
+  flex: none; box-sizing: border-box; width: var(--film-day-w); align-self: stretch;
+  display: grid; place-items: center; padding: 0 2px 0 4px; overflow: hidden;
   writing-mode: vertical-rl; font-size: 12px; font-weight: 700; color: var(--muted);
   border-left: 2px solid var(--border);
 }
-.film-day:first-child { border-left: 0; padding-left: 0; }
+.film-day.is-first { border-left: 0; }
 .film-item {
-  flex: none; position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  flex: none; box-sizing: border-box; width: var(--film-item-w); position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px;
   padding: 0; border: 0; background: none; color: var(--text); font: inherit; cursor: pointer;
 }
 .film-item img {
@@ -244,10 +248,10 @@ body:has(.map-main) { display: flex; flex-direction: column; height: 100dvh; }
 .film-item.st-A img { border-color: var(--st-A); }
 .film-item.st-B img { border-color: var(--st-B); }
 .film-item.st-D img { border-color: var(--st-D); filter: grayscale(1); opacity: .7; }
-.film-item .seq { top: -6px; left: -6px; }
+.film-item .seq { top: -6px; left: 0; }
 .film-item .time { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .film-item .noloc {
-  position: absolute; left: 3px; right: 3px; top: 40px; border-radius: 4px; text-align: center;
+  position: absolute; left: 8px; right: 8px; top: 40px; border-radius: 4px; text-align: center;
   background: rgba(0,0,0,.6); color: #fff; font-size: 10px; line-height: 16px;
 }
 .film-item.has-note img { box-shadow: 0 0 0 3px var(--note); }
@@ -345,9 +349,9 @@ body:has(.map-main) { display: flex; flex-direction: column; height: 100dvh; }
   .date-all { border-radius: 6px; margin-bottom: 0; }
   .topbar-right { gap: 10px; }
   .who { display: none; }
-  .film { left: 8px; right: 8px; bottom: 20px; gap: 8px; padding: 10px 8px 6px; }
+  .film { --film-item-w: 60px; left: 8px; right: 8px; bottom: 20px; padding: 10px 8px 6px; }
   .film-item img { width: 52px; height: 52px; }
-  .film-item .noloc { top: 34px; }
+  .film-item .noloc { top: 34px; left: 7px; right: 7px; }
   /* 크게 보기: 화면 전체, 사진 위 · 정보 아래 */
   .viewer { width: 100vw; height: 100dvh; border-radius: 0; }
   .pv { grid-template-columns: 1fr; grid-template-rows: 46dvh minmax(0, 1fr); }

@@ -60,7 +60,11 @@ def _diary_brief(row: dict) -> dict:
 
 @bp.get("/map-photos")
 def map_photos():
-    """기간·상태 조건의 사진 (촬영 시각순). 위치 없는 사진은 lat/lng 가 null"""
+    """
+    기간·상태 조건의 사진 (촬영 시각순). 위치 없는 사진은 lat/lng 가 null
+    - 사진이 수천 장일 수 있어 이미지 주소(thumb/mini/image_url)는 보내지 않는다.
+      화면(map.js)이 pic_id 로 주소를 만든다 → 응답 크기·서버 변환 메모리가 절반 이하
+    """
     start, end = request.args.get("start", ""), request.args.get("end", "")
     try:
         result = photo_logic.list_map_photos(g.user["user_id"], start, end, _status_arg())
@@ -68,14 +72,17 @@ def map_photos():
         return jsonify(error=str(e)), 400
     user_id = g.user["user_id"]
     noted = note_logic.photo_ids_with_notes(user_id, [r["pic_id"] for r in result["photos"]])
-    return jsonify(photos=[_photo_json(r, r["pic_id"] in noted) for r in result["photos"]],
+    return jsonify(photos=[_photo_json(r, r["pic_id"] in noted, urls=False) for r in result["photos"]],
                    unlocated_count=result["unlocated_count"])
 
 
-def _photo_json(r: dict, has_note: bool = False) -> dict:
-    """사진 행 → 화면용 JSON (좌표 Decimal → float, 위치 없으면 null, has_note = 설명이 있는지)"""
+def _photo_json(r: dict, has_note: bool = False, urls: bool = True) -> dict:
+    """
+    사진 행 → 화면용 JSON (좌표 Decimal → float, 위치 없으면 null, has_note = 설명이 있는지)
+    - urls=False 면 이미지 주소 3개를 빼고 보낸다 (지도 목록용 — 화면이 pic_id 로 만든다)
+    """
     located = photo_logic.has_location(r)
-    return {
+    j = {
         "pic_id": r["pic_id"],
         "base_dt": r["base_dt"],
         "photo_at": r["photo_at"].strftime("%Y-%m-%d %H:%M"),
@@ -84,10 +91,12 @@ def _photo_json(r: dict, has_note: bool = False) -> dict:
         "name": r["original_file_name"] or "",
         "status": r["status"].upper(),
         "has_note": has_note,
-        "thumb_url": url_for("photo.thumb", pic_id=r["pic_id"]),
-        "mini_url": url_for("photo.mini", pic_id=r["pic_id"]),   # 마커·필름용 (128px 정사각형)
-        "image_url": url_for("photo.image", pic_id=r["pic_id"]),
     }
+    if urls:
+        j["thumb_url"] = url_for("photo.thumb", pic_id=r["pic_id"])
+        j["mini_url"] = url_for("photo.mini", pic_id=r["pic_id"])   # 마커·필름용 (128px 정사각형)
+        j["image_url"] = url_for("photo.image", pic_id=r["pic_id"])
+    return j
 
 
 # ============================================================
