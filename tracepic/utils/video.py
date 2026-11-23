@@ -233,6 +233,55 @@ def split_png_stream(data: bytes) -> list[Image.Image]:
     return frames
 
 
+def is_animated(img: Image.Image) -> bool:
+    """움직이는 그림(프레임 2장 이상)인지 — 업로드된 움직이는 WebP 를 클립으로 저장할지 정할 때 쓴다"""
+    return getattr(img, "is_animated", False) and getattr(img, "n_frames", 1) > 1
+
+
+def frames_from_animation(img: Image.Image) -> list[Image.Image]:
+    """
+    움직이는 그림(WebP 등) → 클립 프레임 목록 (동영상 클립과 같은 규칙: 초당 CLIP_FPS, 최대 4초, 짧은 변 최대 720px)
+    - 앞에서부터 4초만 쓴다. 더 짧으면 전체 길이만큼 (반복 재생은 to_webp 의 loop=0 이 맡음).
+    - 원래 프레임 간격이 제각각이어도 0.1초마다 '그 순간 보이는 프레임'을 골라 고르게 맞춘다.
+    - 메모리: 고른 프레임만 바로 줄여서 RGB 로 남긴다 (원본 크기 프레임을 모아 두지 않음). 4초를 넘는 프레임은 디코딩하지 않는다.
+    - 투명한 부분은 흰색으로 채운다 (사진과 같은 규칙).
+    """
+    limit_ms = (CLIP_END - CLIP_START) * 1000
+    step_ms = 1000 / CLIP_FPS
+    frames: list[Image.Image] = []
+    t = 0.0             # 지금 프레임이 시작하는 시각(ms)
+    next_ms = 0.0       # 다음에 뽑을 시각(ms)
+    for i in range(img.n_frames):
+        img.seek(i)
+        img.load()                                 # Pillow 는 load() 뒤에야 이 프레임의 duration 을 채운다
+        dur = img.info.get("duration") or 100      # 0·없음이면 브라우저처럼 0.1초로 본다
+        shown = None
+        while next_ms < t + dur and next_ms < limit_ms:
+            if shown is None:
+                shown = _clip_frame(img)
+            frames.append(shown)                   # 같은 프레임이 여러 번이면 같은 객체를 다시 쓴다
+            next_ms += step_ms
+        t += dur
+        if next_ms >= limit_ms:
+            break
+    if not frames:
+        img.seek(0)
+        frames.append(_clip_frame(img))
+    return frames
+
+
+def _clip_frame(img: Image.Image) -> Image.Image:
+    """지금 프레임 → 흰 배경 RGB, 짧은 변 IMAGE_SHORT_SIDE 이하 (확대는 안 함)"""
+    rgba = img.convert("RGBA")
+    frame = Image.new("RGB", rgba.size, (255, 255, 255))
+    frame.paste(rgba, mask=rgba.getchannel("A"))
+    w, h = frame.size
+    scale = IMAGE_SHORT_SIDE / min(w, h)
+    if scale < 1:
+        frame = frame.resize((max(1, round(w * scale)), max(1, round(h * scale))), Image.Resampling.LANCZOS)
+    return frame
+
+
 def to_webp(frames: list[Image.Image], kind: str) -> bytes:
     """프레임 목록 → 크기별 움직이는 WebP (무한 반복)"""
     if kind == "image":

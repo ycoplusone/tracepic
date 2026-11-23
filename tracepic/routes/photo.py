@@ -91,7 +91,7 @@ def handle_upload(file):
                             g.user["user_id"], result.pic_id)
     return jsonify(
         ok=True,
-        kind="clip" if is_video else "photo",
+        kind="clip" if result.animated else "photo",   # 동영상·움직이는 WebP 는 클립
         pic_id=result.pic_id,
         base_dt=result.base_dt,
         photo_at=result.photo_at.strftime("%Y-%m-%d %H:%M:%S"),

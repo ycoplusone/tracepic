@@ -130,7 +130,7 @@
   function describe(data) {
     const source = { exif: "", meta: "", filename: " (파일 이름의 날짜)", file: " (파일 수정 시각)", upload: " (업로드 시각)" }[data.time_source] || "";
     const place = data.latitude !== null ? "위치 있음" : "위치 없음";
-    const clip = data.kind === "clip" ? "🎞 동영상 3~7초 · " : "";
+    const clip = data.kind === "clip" ? "🎞 움직이는 클립 · " : "";   // 동영상(3~7초)·움직이는 WebP(앞 4초)
     return `${clip}${data.photo_at}${source} · ${place}`;
   }
 

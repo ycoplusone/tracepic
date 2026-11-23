@@ -5,7 +5,7 @@
 <h2 class="page-title">사진 올리기</h2>
 <p class="muted small">
   촬영 시각과 위치(GPS)는 사진 정보(EXIF)에서 자동으로 읽습니다. 사진은 암호화되어 저장됩니다.
-  사진 최대 {{ max_mb }}MB · JPG, PNG, WEBP{% if heif_supported %}, HEIC{% endif %}
+  사진 최대 {{ max_mb }}MB · JPG, PNG, WEBP{% if heif_supported %}, HEIC{% endif %} (움직이는 WebP는 앞 4초를 움직이는 그대로 저장)
   {% if video_supported %}
   <br>동영상 최대 {{ max_video_mb }}MB · {{ video_exts|join(', ')|upper }} — 영상은 보관하지 않고 <strong>3~7초 구간만 움직이는 그림(WebP, 소리 없음)</strong>으로 저장합니다.
   {% endif %}

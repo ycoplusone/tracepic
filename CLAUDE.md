@@ -76,6 +76,8 @@
 - 위치: `com.apple.quicktime.location.ISO6709` / `location` / `location-eng`(ISO 6709). DJI Osmo는 대개 GPS가 없어 위치 없음으로 들어옵니다(크게 보기에서 직접 찍기).
 - 크기 한도: 사진 `MAX_UPLOAD_MB`(30), 동영상 `MAX_VIDEO_MB`(500). `MAX_CONTENT_LENGTH`는 둘 중 큰 값 + 1MB입니다. **Nginx `client_max_body_size`도 500M 이상**이어야 하고, 변환에 수십 초가 걸릴 수 있으니 `proxy_read_timeout`·gunicorn `--timeout`을 넉넉히(300초) 둡니다.
 - HDR·10bit·D-Log 영상은 색 변환(톤매핑)을 하지 않아 색이 흐리게 나올 수 있습니다.
+- **움직이는 WebP 사진**(2026-11-23 사용자 결정)도 JPEG로 바꾸지 않고 클립과 같은 규칙으로 저장합니다: 앞에서부터 최대 4초, 0.1초마다 그 순간 프레임을 골라 10fps, 크기 3종 동일, 투명 부분은 흰색. ffmpeg는 필요 없습니다(`video.is_animated`, `video.frames_from_animation`, `photo_file_logic.save_upload`). 응답 `kind`는 `clip`입니다. 프레임이 1장인 WebP는 전처럼 JPEG 사진입니다.
+  - Pillow는 `seek()` 뒤 `load()`를 해야 그 프레임의 `duration`을 채웁니다. 4초를 넘는 프레임은 디코딩하지 않고, 고른 프레임만 바로 줄여 둡니다(메모리).
 
 ## 메일 가입 · 관리자 승인 · 비밀번호 찾기 (2026-11-20)
 - 메일 발송: `utils/mail.send_mail`(SMTP, 현재 Brevo). 설정은 `.env`의 `SMTP_HOST/PORT/USER/PASSWORD`, `MAIL_FROM`, 선택 `PUBLIC_BASE_URL`(메일 속 링크).
@@ -116,6 +118,7 @@
   - 파일 이름의 `time_ns`는 이름이 겹치지 않게 하는 용도이며 키와는 관계없습니다. 키 유도에는 DB의 `user_id`를 씁니다.
   - 사용자 폴더는 아이디가 `[A-Za-z0-9_.-]`일 때만 그대로 쓰고, 아니면 sha256 앞 16자리를 씁니다(경로 조작 방지).
   - 원본은 보관하지 않습니다. 웹용 JPEG(긴 변 `IMAGE_MAX_SIDE`), 썸네일, 마커용만 저장하고, 파일에서는 EXIF(GPS 포함)를 지웁니다. 좌표는 DB에만 있습니다.
+  - **WebP로 올린 사진은 JPEG로 바꾸지 않고** 웹용·썸네일·마커용 모두 WebP로 저장합니다(2026-11-23 사용자 결정, 크기 규칙은 같음). 움직이는 WebP는 아래 클립 규칙, 정지 WebP는 정지 WebP입니다. JPEG·PNG·HEIC는 계속 JPEG입니다. 백업 zip에서는 `.webp`로 담기고 EXIF는 넣지 않습니다(시각·위치는 `photos.csv`).
   - JPEG는 `open_image(max_side=...)`가 draft로 필요한 크기만큼만 디코딩합니다. 세 크기는 `normalize()`(회전·RGB 정리)를 한 번 거친 이미지로 만듭니다.
   - 촬영 시각은 EXIF → **파일 이름 속 날짜**(`utils/dates.photo_at_from_filename`, 2026-11-23 사용자 결정) → 브라우저가 보낸 파일 수정 시각 → 업로드 시각 순서로 정합니다. EXIF 시각은 시간대를 바꾸지 않고 현지 시각 그대로 씁니다.
     - 이름 예: `IMG_20250503_142210`, `PXL_…_142210123`(밀리초), `KakaoTalk_…`, `Screenshot_20250503-142210`, `DJI_20250503142210_0001`, `photo_2025-05-03_14-22-10`, `IMG-20250503-WA0001`(날짜만 → 00:00:00). 앞뒤가 숫자에 붙은 날짜, 없는 날짜, 1990년 전·내일 이후는 무시합니다. `time_source`는 `filename`입니다.
@@ -236,6 +239,7 @@
 - [x] 메일 가입 신청(인증 코드) · 관리자 승인 화면 · 비밀번호 찾기 (2026-11-20, 테스트 62항목 통과)
 - [x] 동영상 업로드 → 3~7초 움직이는 WebP 클립 3종 (2026-11-20, 실제 ffmpeg 포함 테스트 49항목 통과, 사용자 실제 영상 확인 — 위치·촬영 시각 추출 정상)
 - [x] 앱 API: 앱 로그인(device_token 발급)·업로드·로그아웃 (2026-11-20, 테스트 28항목 통과)
+- [x] 움직이는 WebP 업로드를 클립(움직이는 WebP 3종)으로 저장 (2026-11-23)
 - [ ] 배포 (Nginx, systemd, gunicorn) — **HTTPS는 보류 (2026-11-13 사용자 결정, 기능 개발 우선)**. 배포할 때 Nginx + Let's Encrypt + ProxyFix로 진행할 예정
 
 ## Git 커밋 규칙
