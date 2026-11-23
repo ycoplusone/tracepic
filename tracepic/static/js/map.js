@@ -3,7 +3,13 @@
 // - 날짜를 누르면 그날 사진만 지도에 표시하고, '기간 전체'(또는 같은 날 다시 누르기)로 돌아간다.
 // - /api/photo-dates 로 일자별 장수를, /api/map-photos 로 사진을 받는다.
 // - 사진은 촬영 시각순으로 번호(1, 2, 3…)를 매겨 마커와 아래쪽 '촬영 순서 필름'에 함께 보여 준다.
+//   필름(과 크게 보기의 이전/다음)은 **최근 사진부터** 나온다. 번호는 촬영 순서 그대로다(맨 앞이 가장 큰 번호).
 //   위치 없는 사진은 지도에는 못 찍지만 필름에는 순서대로 나온다.
+// - 메모리 절약 (사진이 수천 장이어도 휴대폰 탭이 버티게, 대신 아주 조금 늦게 뜰 수 있음):
+//   · 필름은 화면 근처 칸만 만들고 나머지는 빈 여백으로 둔다(renderFilmWindow). 지나간 칸은 지워서 사진도 메모리에서 빠진다.
+//   · 마커 그림(DOM)은 지도에 나타날 때 만든다(PhotoIcon). 묶음 안·화면 밖 마커는 그림이 없다.
+//   · 지도 타일은 화면 밖 여분을 적게 들고, 움직임이 멈춘 뒤 받는다.
+//   · 이미지 주소는 서버가 보내지 않고 pic_id 로 만든다. 설명 편집기(OverType)는 '쓰기'를 처음 누를 때 불러온다.
 // - '이동 경로'를 켜면 촬영 시각순으로 선을 잇는다.
 // - 필름은 Tab 으로 한 번만 들어가고(선택된 사진), 그 안에서는 ← → (Home/End)로 옮겨 다니며 Enter 로 크게 본다.
 // - 사진 크게 보기 창에서 이전/다음(촬영순), 상태 변경, 위치 찍기·수정, 설명(마크다운) 쓰기를 한다.
@@ -25,24 +31,43 @@
   const statusInputs = [...document.querySelectorAll('input[name="status"]')];
   const STATUS_LABEL = Object.fromEntries(config.statuses);   // { C: "나만 보기", ... }
 
+  // 타일 설정: 화면 밖 여분 타일을 1줄만 들고(기본 2), 지도를 끌거나 확대하는 중에는 받지 않고 멈춘 뒤 받는다
+  // → 들고 있는 타일 이미지가 줄어든다 (움직인 직후 잠깐 빈 칸이 보일 수 있음)
+  const TILE_OPTS = {
+    maxZoom: 19,
+    keepBuffer: 1,
+    updateWhenIdle: true,
+    updateWhenZooming: false,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  };
+
   // ── 지도 기본 설정 (사진이 없으면 한반도 중심) ──
   const map = L.map("map", { zoomControl: true }).setView([36.5, 127.8], 7);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    ...TILE_OPTS,
   }).addTo(map);
 
   // 패널 내용(날짜 목록 등)이 채워지면 지도 영역 크기가 바뀐다 → Leaflet 에 다시 알려 줘야 타일·중심이 맞는다
   new ResizeObserver(() => map.invalidateSize()).observe(document.getElementById("map"));
 
-  const cluster = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 50 });
+  // chunkedLoading: 마커 수천 개를 조금씩 나눠 넣어 화면이 멈추지 않게 한다
+  // removeOutsideVisibleBounds: 화면 밖 마커는 지도에서 빼 둔다(그림 DOM 도 없어짐 — 기본값이지만 명시)
+  const cluster = L.markerClusterGroup({
+    showCoverageOnHover: false, maxClusterRadius: 50, chunkedLoading: true, removeOutsideVisibleBounds: true,
+  });
   map.addLayer(cluster);
+  // 마커마다 클릭 함수를 따로 두지 않고 묶음에서 한 번에 받는다 (이어서 ← → 로 넘길 수 있게 필름에 포커스)
+  cluster.on("click", (e) => {
+    const p = e.layer.options.photo;
+    if (p) { highlight(p.pic_id); focusFilm(p.pic_id); }
+  });
 
   // ── 상태 ──
   let routeLine = null;
   let dates = [];             // 조회 기간 안에서 사진이 있는 날 [{ base_dt, count }] 날짜 오름차순
   let diaries = new Map();    // 조회 기간 안의 일기 base_dt → { title, excerpt }
-  let photos = [];            // 조회된 사진 (촬영 시각순, p.seq = 1부터 매긴 순번)
+  let photos = [];            // 조회된 사진 (화면 순서 = 최근 것부터, p.seq = 촬영순 번호 1부터)
+  const indexById = new Map(); // pic_id → photos 위치 (사진마다 배열을 훑지 않게)
   const markers = new Map();  // pic_id → Leaflet 마커 (위치 있는 사진만)
   let range = null;           // 조회 기간 { start, end } — 날짜 목록이 이 기간의 일자별로 나온다
   let focusDay = null;        // 날짜 목록에서 고른 하루 (null 이면 기간 전체를 지도에 표시)
@@ -84,6 +109,11 @@
     return data;
   }
   const photoUrl = (id) => config.photoUrl0.replace(/0$/, String(id));   // /api/photos/0 → /api/photos/123
+  // 이미지 주소: /photos/0/mini → /photos/123/mini (지도 목록은 주소 없이 pic_id 만 온다)
+  const imgUrl = (tpl, id) => tpl.replace("/0/", `/${id}/`);
+  const miniUrl = (p) => imgUrl(config.miniUrl0, p.pic_id);
+  const thumbUrl = (p) => imgUrl(config.thumbUrl0, p.pic_id);
+  const imageUrl = (p) => imgUrl(config.imageUrl0, p.pic_id);
 
   // ============================================================
   // 상태 조건
@@ -263,7 +293,7 @@
       return;
     }
     if (seq !== requestSeq) return; // 그사이 다른 조건으로 다시 불렀으면 버림
-    draw(data.photos, keepView);
+    draw(newestFirst(data.photos), keepView);
     renderSummary();
   }
 
@@ -279,26 +309,33 @@
     summary.textContent = parts.join(" · ");
   }
 
+  // 서버는 촬영 시각순으로 준다 → 번호는 그 순서대로 매기고, 화면에는 최근 것부터 보여 준다
+  function newestFirst(list) {
+    list.forEach((p, i) => { p.seq = i + 1; });
+    return list.reverse();
+  }
+
+  // list: 화면 순서(최근 것부터), p.seq 가 매겨진 목록
   function draw(list, keepView) {
     photos = list;
-    photos.forEach((p, i) => { p.seq = i + 1; });   // 서버가 촬영 시각순으로 준다 → 그대로 번호
+    indexById.clear();
+    photos.forEach((p, i) => indexById.set(p.pic_id, i));
     cluster.clearLayers();
     markers.clear();
     if (routeLine) routeLine.remove();
     routeLine = null;
-    renderFilm();
+    renderFilm(keepView);
 
     const located = photos.filter((p) => p.lat !== null);
     if (located.length === 0) return;
     for (const p of located) {
-      const marker = L.marker([p.lat, p.lng], { icon: thumbIcon(p), title: `${p.seq}. ${p.photo_at}` });
-      marker.bindPopup(() => popupContent(p), { minWidth: 200 });
-      marker.on("click", () => { highlight(p.pic_id); focusFilm(p.pic_id); });   // 이어서 ← → 로 넘길 수 있게
+      const marker = L.marker([p.lat, p.lng], { icon: photoIcon(p), title: `${p.seq}. ${p.photo_at}`, photo: p });
+      marker.bindPopup(() => popupContent(p), { minWidth: 200 });   // 팝업 내용은 열 때 만든다
       markers.set(p.pic_id, marker);
     }
     cluster.addLayers([...markers.values()]);
 
-    // 촬영 시각순 이동 경로
+    // 이동 경로 (화면 순서는 최근 것부터지만 선은 같은 점들을 잇는 것이라 모양은 촬영순과 같다)
     const latlngs = located.map((p) => [p.lat, p.lng]);
     routeLine = L.polyline(latlngs, { color: getAccent(), weight: 3, opacity: 0.7, dashArray: "6 6" });
     if (routeToggle.checked) routeLine.addTo(map);
@@ -318,17 +355,32 @@
     `${base} st-${p.status}${p.has_note ? " has-note" : ""}${p.pic_id === selectedId ? " is-selected" : ""}`;
 
   // 썸네일 마커 아이콘: 사진 + 순번 배지, 테두리 색으로 상태·설명 표시
-  function thumbIcon(p) {
+  // - L.divIcon 에 DOM 을 미리 넣으면 마커 수천 개의 그림이 처음부터 다 만들어진다.
+  //   그래서 Leaflet 이 마커를 지도에 올릴 때(createIcon) 그 자리에서 만들고, 내려가면 버린다.
+  // - 클래스(상태·설명·선택)도 그때의 값으로 정하므로 묶음에서 풀려 다시 나와도 모양이 맞다.
+  const PhotoIcon = L.DivIcon.extend({
+    createIcon(oldIcon) {
+      const p = this.options.photo;
+      this.options.className = photoClass("photo-marker", p);
+      this.options.html = markerBox(p);
+      const el = L.DivIcon.prototype.createIcon.call(this, oldIcon);
+      this.options.html = "";            // 만든 DOM 은 지도에 붙은 것만 남긴다 (아이콘 객체에 들고 있지 않음)
+      return el;
+    },
+  });
+  const photoIcon = (p) => new PhotoIcon({ photo: p, iconSize: [48, 48], iconAnchor: [24, 24] });
+
+  function markerBox(p) {
     const box = document.createElement("div");
     const img = document.createElement("img");
-    img.src = p.mini_url || p.thumb_url;
+    img.src = miniUrl(p);
     img.alt = "";
-    img.loading = "lazy";
+    img.decoding = "async";
     const num = document.createElement("span");
     num.className = "seq";
     num.textContent = p.seq;
     box.append(img, num);
-    return L.divIcon({ className: photoClass("photo-marker", p), html: box, iconSize: [48, 48], iconAnchor: [24, 24] });
+    return box;
   }
 
   // 마커를 눌렀을 때 팝업 (DOM 으로 만들어 파일명에 HTML 이 있어도 안전)
@@ -336,9 +388,9 @@
     const box = document.createElement("div");
     box.className = "photo-popup";
     const img = document.createElement("img");
-    img.src = p.thumb_url;
+    img.src = thumbUrl(p);
     img.alt = p.name;
-    img.addEventListener("click", () => openViewer(photos.indexOf(p)));
+    img.addEventListener("click", () => openViewer(indexById.get(p.pic_id)));
     const time = document.createElement("div");
     time.className = "time";
     time.textContent = `${p.seq}번째 · ${p.photo_at}`;
@@ -349,65 +401,176 @@
     btn.type = "button";
     btn.className = "btn-link";
     btn.textContent = "크게 보기 · 설명";
-    btn.addEventListener("click", () => openViewer(photos.indexOf(p)));
+    btn.addEventListener("click", () => openViewer(indexById.get(p.pic_id)));
     box.append(img, time, meta, btn);
     return box;
   }
 
-  // ── 촬영 순서 필름 ──
-  function renderFilm() {
-    film.replaceChildren();
+  // ── 촬영 순서 필름 (최근 사진부터) ──
+  // 사진이 수천 장이면 버튼·사진을 다 만들면 휴대폰 메모리가 모자란다.
+  // 그래서 칸 폭을 CSS 변수(--film-item-w, --film-day-w)로 고정해 두고, 각 칸의 위치만 계산해 둔 뒤
+  // 지금 보이는 곳 앞뒤 한 화면씩만 실제 버튼으로 만든다. 나머지는 양 끝 빈 여백(.film-pad)이 폭만 차지한다.
+  let slots = [];                 // 필름 칸: { day: base_dt } (날짜 구분) 또는 { p } (사진)
+  let slotX = [];                 // 칸마다 왼쪽 위치(px), 마지막 원소는 전체 폭
+  const slotOf = new Map();       // pic_id → slots 위치
+  const filmNodes = new Map();    // pic_id → 지금 만들어 둔 버튼 (화면 근처만)
+  let filmRange = [0, 0];         // 지금 만든 칸 범위 [from, to)
+  const padL = document.createElement("div");
+  const padR = document.createElement("div");
+  padL.className = padR.className = "film-pad";
+  padL.setAttribute("aria-hidden", "true");
+  padR.setAttribute("aria-hidden", "true");
+
+  // keepScroll: 같은 목록을 다시 그릴 때(위치 저장 등) 필름 스크롤 위치를 그대로 둔다
+  function renderFilm(keepScroll = false) {
+    const scroll = keepScroll ? film.scrollLeft : 0;
     film.hidden = photos.length === 0;
+    slots = [];
+    slotOf.clear();
     let prevDt = null;
     for (const p of photos) {
-      if (p.base_dt !== prevDt) {           // 날짜가 바뀌는 곳에 구분 표시
-        const day = document.createElement("div");
-        day.className = "film-day";
-        day.textContent = `${+p.base_dt.slice(4, 6)}.${+p.base_dt.slice(6, 8)}`;
-        film.append(day);
+      if (p.base_dt !== prevDt) {           // 날짜가 바뀌는 곳에 구분 칸
+        slots.push({ day: p.base_dt });
         prevDt = p.base_dt;
       }
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = photoClass("film-item", p);
-      btn.dataset.id = p.pic_id;
-      btn.setAttribute("role", "listitem");
-      btn.tabIndex = -1;                    // Tab 정지점은 하나만 (syncTabStop)
-      btn.title = `${p.seq}번째 · ${p.photo_at} · ${STATUS_LABEL[p.status] || p.status}` +
-        `${p.has_note ? " · 설명 있음" : ""}${p.lat === null ? " · 위치 없음" : ""}`;
-      const img = document.createElement("img");
-      img.src = p.mini_url || p.thumb_url;
-      img.alt = "";
-      img.loading = "lazy";
-      const num = document.createElement("span");
-      num.className = "seq";
-      num.textContent = p.seq;
-      const time = document.createElement("span");
-      time.className = "time";
-      time.textContent = p.photo_at.slice(11);
-      btn.append(img, num, time);
-      if (p.lat === null) {
-        const nl = document.createElement("span");
-        nl.className = "noloc";
-        nl.textContent = "위치 없음";
-        btn.append(nl);
-      }
-      btn.addEventListener("click", () => selectPhoto(p));
-      btn.addEventListener("dblclick", () => openViewer(photos.indexOf(p)));
-      film.append(btn);
+      slotOf.set(p.pic_id, slots.length);
+      slots.push({ p });
     }
+    filmNodes.clear();
+    film.replaceChildren(padL, padR);
+    measureFilm();
+    padR.style.width = `${slotX[slots.length]}px`;   // 전체 폭을 먼저 잡아야 스크롤 위치를 되돌릴 수 있다
+    film.scrollLeft = scroll;
+    renderFilmWindow(true);
+  }
+
+  // 칸 위치 계산 (화면 폭이 바뀌어 칸 폭이 달라지면 다시)
+  function measureFilm() {
+    const cs = getComputedStyle(film);
+    const itemW = parseFloat(cs.getPropertyValue("--film-item-w")) || 70;
+    const dayW = parseFloat(cs.getPropertyValue("--film-day-w")) || 24;
+    slotX = new Array(slots.length + 1);
+    let x = 0;
+    slots.forEach((sl, i) => { slotX[i] = x; x += sl.p ? itemW : dayW; });
+    slotX[slots.length] = x;
+  }
+
+  // x 위치에 있는 칸 번호 (이진 탐색)
+  function slotAt(x) {
+    let lo = 0, hi = slots.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (slotX[mid] <= x) lo = mid; else hi = mid - 1;
+    }
+    return lo;
+  }
+
+  // 보이는 곳 앞뒤 한 화면씩만 버튼으로 만든다. 범위 밖으로 나간 버튼은 버린다(사진 메모리도 함께 풀림)
+  function renderFilmWindow(force = false) {
+    if (slots.length === 0 || film.hidden) return;
+    const w = film.clientWidth || window.innerWidth;
+    const from = slotAt(Math.max(0, film.scrollLeft - w));
+    const to = Math.min(slots.length, slotAt(film.scrollLeft + 2 * w) + 1);
+    if (!force && from === filmRange[0] && to === filmRange[1]) return;
+    // 포커스 중인 버튼은 다시 붙일 때 포커스가 풀리므로 기억했다가 돌려준다
+    const focusedId = film.contains(document.activeElement) ? Number(document.activeElement.dataset.id) : null;
+    const nodes = [];
+    const keep = new Map();
+    for (let i = from; i < to; i++) {
+      const sl = slots[i];
+      if (sl.day) { nodes.push(dayNode(sl.day, i === 0)); continue; }
+      const el = filmNodes.get(sl.p.pic_id) || filmButton(sl.p);
+      keep.set(sl.p.pic_id, el);
+      nodes.push(el);
+    }
+    filmNodes.clear();
+    for (const [id, el] of keep) filmNodes.set(id, el);
+    padL.style.width = `${slotX[from]}px`;
+    padR.style.width = `${slotX[slots.length] - slotX[to]}px`;
+    film.replaceChildren(padL, ...nodes, padR);
+    filmRange = [from, to];
     syncTabStop();
+    if (focusedId !== null) filmNodes.get(focusedId)?.focus({ preventScroll: true });
   }
 
-  // 필름의 Tab 정지점: 선택된 사진(없으면 첫 사진) 하나만 tabindex=0, 나머지는 ← → 로만 간다
+  function dayNode(dt, first) {
+    const day = document.createElement("div");
+    day.className = first ? "film-day is-first" : "film-day";
+    day.textContent = `${+dt.slice(4, 6)}.${+dt.slice(6, 8)}`;
+    return day;
+  }
+
+  function filmButton(p) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = photoClass("film-item", p);
+    btn.dataset.id = p.pic_id;
+    btn.setAttribute("role", "listitem");
+    btn.tabIndex = -1;                    // Tab 정지점은 하나만 (syncTabStop)
+    btn.title = `${p.seq}번째 · ${p.photo_at} · ${STATUS_LABEL[p.status] || p.status}` +
+      `${p.has_note ? " · 설명 있음" : ""}${p.lat === null ? " · 위치 없음" : ""}`;
+    const img = document.createElement("img");
+    img.src = miniUrl(p);
+    img.alt = "";
+    img.decoding = "async";
+    const num = document.createElement("span");
+    num.className = "seq";
+    num.textContent = p.seq;
+    const time = document.createElement("span");
+    time.className = "time";
+    time.textContent = p.photo_at.slice(11);
+    btn.append(img, num, time);
+    if (p.lat === null) {
+      const nl = document.createElement("span");
+      nl.className = "noloc";
+      nl.textContent = "위치 없음";
+      btn.append(nl);
+    }
+    return btn;
+  }
+
+  // 스크롤하면 다음 프레임에 한 번만 다시 계산 (스크롤 중 매번 하지 않게)
+  let filmTick = 0;
+  film.addEventListener("scroll", () => {
+    if (!filmTick) filmTick = requestAnimationFrame(() => { filmTick = 0; renderFilmWindow(); });
+  }, { passive: true });
+  // 화면 폭이 바뀌면(모바일 회전 등) 칸 폭이 달라질 수 있다
+  new ResizeObserver(() => { if (slots.length) { measureFilm(); renderFilmWindow(true); } }).observe(film);
+
+  // 버튼마다 함수를 두지 않고 필름에서 한 번에 받는다
+  const photoOf = (el) => photos[indexById.get(Number(el.dataset.id))];
+  film.addEventListener("click", (e) => {
+    const el = e.target.closest(".film-item");
+    if (el && photoOf(el)) selectPhoto(photoOf(el));
+  });
+  film.addEventListener("dblclick", (e) => {
+    const el = e.target.closest(".film-item");
+    if (el && photoOf(el)) openViewer(indexById.get(Number(el.dataset.id)));
+  });
+
+  // 그 사진 칸이 필름 가운데 오게 스크롤
+  function scrollFilmTo(id, smooth) {
+    const i = slotOf.get(id);
+    if (i === undefined || film.hidden) return;
+    const left = (slotX[i] + slotX[i + 1]) / 2 - film.clientWidth / 2;
+    film.scrollTo({ left: Math.max(0, left), behavior: smooth ? "smooth" : "auto" });
+  }
+
+  // 필름의 Tab 정지점: 선택된 사진(안 만들어져 있으면 만든 것 중 첫 칸) 하나만 tabindex=0
   function syncTabStop() {
-    const items = [...film.querySelectorAll(".film-item")];
-    const stop = items.find((el) => Number(el.dataset.id) === selectedId) || items[0];
-    for (const el of items) el.tabIndex = el === stop ? 0 : -1;
+    const stop = filmNodes.get(selectedId) || filmNodes.values().next().value;
+    for (const el of filmNodes.values()) el.tabIndex = el === stop ? 0 : -1;
   }
 
-  const filmItem = (id) => film.querySelector(`.film-item[data-id="${id}"]`);
-  const focusFilm = (id) => filmItem(id)?.focus({ preventScroll: true });   // 스크롤은 highlight 가 부드럽게 한다
+  const filmItem = (id) => filmNodes.get(id);
+  // 포커스 옮기기: 아직 버튼이 없으면(멀리 있는 사진) 바로 그 자리로 스크롤해서 만든 뒤 옮긴다
+  function focusFilm(id) {
+    if (!filmNodes.has(id)) {
+      scrollFilmTo(id, false);
+      renderFilmWindow();
+    }
+    filmNodes.get(id)?.focus({ preventScroll: true });   // 스크롤은 highlight 가 부드럽게 한다
+  }
 
   // 방향키로 옮기기: 위치 있는 사진은 지도를 그 마커로, 없는 사진은 강조만 (크게 보기는 Enter)
   function stepTo(index) {
@@ -421,7 +584,7 @@
   }
 
   // 지금 선택된 사진 위치 (없으면 -1)
-  const selectedIndex = () => photos.findIndex((p) => p.pic_id === selectedId);
+  const selectedIndex = () => indexById.get(selectedId) ?? -1;
 
   // ← → 한 칸, Home/End 처음·끝, Enter 크게 보기 (Space 는 클릭과 같음)
   function filmKey(e, index) {
@@ -440,7 +603,7 @@
   film.addEventListener("keydown", (e) => {
     const item = e.target.closest(".film-item");
     if (!item || e.altKey || e.ctrlKey || e.metaKey) return;
-    filmKey(e, photos.findIndex((p) => p.pic_id === Number(item.dataset.id)));
+    filmKey(e, indexById.get(Number(item.dataset.id)) ?? -1);
   });
 
   // 아무 곳에도 포커스가 없을 때(페이지 빈 곳을 누른 뒤 등)도 ← → 로 필름을 넘긴다.
@@ -456,27 +619,32 @@
     highlight(p.pic_id);
     const marker = markers.get(p.pic_id);
     if (marker) cluster.zoomToShowLayer(marker, () => marker.openPopup());
-    else openViewer(photos.indexOf(p));
+    else openViewer(indexById.get(p.pic_id));
   }
 
-  // 선택 강조 (필름 + 마커)
+  // 선택 강조 (필름 + 마커) — 전에 고른 것과 새로 고른 것 두 개만 바꾼다 (사진 수와 관계없이 일정)
+  // 지금 화면에 없는 버튼·마커는 나중에 만들 때 selectedId 를 보고 강조된 모양으로 만든다
   function highlight(id) {
+    const prev = selectedId;
     selectedId = id;
-    for (const el of film.querySelectorAll(".film-item")) {
-      const on = Number(el.dataset.id) === id;
-      el.classList.toggle("is-selected", on);
-      if (on) el.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
-    }
+    if (prev !== null && prev !== id) setSelected(prev, false);
+    setSelected(id, true);
+    scrollFilmTo(id, true);
     syncTabStop();
-    for (const [pid, marker] of markers) {
-      marker.getElement()?.classList.toggle("is-selected", pid === id);
-      marker.setZIndexOffset(pid === id ? 1000 : 0);
+  }
+
+  function setSelected(id, on) {
+    filmNodes.get(id)?.classList.toggle("is-selected", on);
+    const marker = markers.get(id);
+    if (marker) {
+      marker.getElement()?.classList.toggle("is-selected", on);
+      marker.setZIndexOffset(on ? 1000 : 0);
     }
   }
 
   // 사진 상태·설명이 바뀌었을 때 마커·필름 모양만 다시 그린다 (조회는 다시 하지 않음)
   function repaintPhoto(p) {
-    markers.get(p.pic_id)?.setIcon(thumbIcon(p));
+    markers.get(p.pic_id)?.setIcon(photoIcon(p));
     const el = filmItem(p.pic_id);
     if (el) el.className = photoClass("film-item", p);
   }
@@ -494,8 +662,8 @@
     edit: $("pv-edit"), view: $("pv-view"), loading: $("pv-loading"),
     title: $("pv-title"), html: $("pv-html"), empty: $("pv-empty"), updated: $("pv-updated"),
     form: $("pv-form"), titleIn: $("pv-title-in"), preview: $("pv-preview"),
-    // 설명 본문: OverType 마크다운 편집기 (static/js/mdedit.js, 못 불러오면 원래 textarea). 화면 테마를 따라감
-    note: window.TPMd ? TPMd.attach($("pv-note"), { theme: "auto", className: "pv-note-box" }) : $("pv-note"),
+    // 설명 본문: 처음엔 기본 textarea. '쓰기'를 처음 누를 때 OverType 편집기를 불러와 바꿔 끼운다(ensureEditor)
+    note: $("pv-note"),
     tabWrite: $("pv-tab-write"), tabPreview: $("pv-tab-preview"),
     error: $("pv-error"), del: $("pv-delete"), cancel: $("pv-cancel"), save: $("pv-save"),
     trash: $("pv-trash"),
@@ -521,12 +689,12 @@
   }
 
   function openViewer(index) {
-    if (index < 0 || index >= photos.length) return;
+    if (!(index >= 0 && index < photos.length)) return;   // undefined(목록에 없는 사진)도 막는다
     if (viewer.open && !confirmDiscard()) return;
     cur = index;
     const p = photos[cur];
     highlight(p.pic_id);
-    pv.img.src = p.image_url;
+    pv.img.src = imageUrl(p);
     pv.img.alt = p.name || `${p.seq}번째 사진`;
     pv.count.textContent = `${p.seq} / ${photos.length}`;
     pv.prev.disabled = cur === 0;
@@ -577,6 +745,21 @@
   }
 
   // ── 편집 ──
+  // OverType 는 처음 편집할 때만 불러온다 (지도만 보는 동안은 스크립트 약 135KB 를 메모리에 올리지 않음)
+  // 불러오는 동안 textarea 에 쓴 글자는 그대로 넘어간다. 못 불러오면 textarea 를 계속 쓴다.
+  let editorReady = null;
+  function ensureEditor() {
+    if (editorReady || !window.TPMd) return;
+    editorReady = TPMd.load().then(() => {
+      const ta = pv.note;
+      const ed = TPMd.attach(ta, { theme: "auto", className: "pv-note-box" });
+      if (ed === ta) return;
+      ed.hidden = ta.hidden;
+      pv.note = ed;
+      if (editing && !ed.hidden) ed.focus();
+    }).catch((e) => console.warn("기본 입력칸으로 설명을 씁니다.", e));
+  }
+
   function setEditing(on) {
     editing = on;
     pv.form.hidden = !on;
@@ -591,6 +774,7 @@
       pv.del.hidden = !note;
       showTab("write");
       pv.note.focus();
+      ensureEditor();
     }
   }
 
@@ -735,10 +919,7 @@
     locPending = null;
     if (!locMap) {
       locMap = L.map(pv.locMapEl, { zoomControl: true });
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      }).addTo(locMap);
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", TILE_OPTS).addTo(locMap);
       locMap.on("click", (e) => placePin(e.latlng, true));
     }
     locMap.invalidateSize();   // 숨겨져 있던 칸이라 크기를 다시 재야 한다
