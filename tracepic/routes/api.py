@@ -15,7 +15,7 @@ JSON API (/api) — 지도 화면의 JS 가 호출한다
 로그인하지 않았으면 전역 가드(routes/auth.py)가 401 JSON 을 돌려준다.
 """
 import math
-from datetime import date
+from datetime import date, datetime, timedelta
 
 from flask import Blueprint, g, jsonify, request, url_for
 
@@ -112,6 +112,7 @@ def photo_detail(pic_id: int):
     note = note_logic.get_photo_note(user_id, pic_id)
     return jsonify(
         **_photo_json(row, note is not None),
+        photo_at_full=row["photo_at"].strftime("%Y-%m-%dT%H:%M:%S"),   # 일시 수정 칸용 (초까지)
         note=None if note is None else {
             "note_id": note["note_id"],
             "title": note["title"] or "",
@@ -128,15 +129,27 @@ def photo_update(pic_id: int):
     사진 정보 변경 — body 에 보낸 항목만 바꾼다
     - {"status": "A" | "B" | "C" | "D"}: 상태 변경 (D 는 휴지통, D → A/B/C 는 복구)
     - {"latitude": 33.4, "longitude": 126.5}: 위치 지정·수정 (둘 다 null 이면 위치 지우기). 휴지통 사진은 안 됨
+    - {"photo_at": "YYYY-MM-DDTHH:MM[:SS]"}: 촬영 일시 수정 (현지 시각, 날짜가 바뀌면 base_dt 도). 휴지통 사진은 안 됨
+    세 가지는 한 요청에 하나만 보낸다.
     """
     data = request.get_json(silent=True) or {}
     has_status = "status" in data
     has_location = "latitude" in data or "longitude" in data
-    if not has_status and not has_location:
-        return jsonify(error="status 또는 latitude/longitude 를 보내야 합니다."), 400
-    if has_status and has_location:
-        return jsonify(error="상태와 위치는 따로 바꿔 주세요."), 400
+    has_time = "photo_at" in data
+    if has_status + has_location + has_time == 0:
+        return jsonify(error="status, latitude/longitude, photo_at 중 하나를 보내야 합니다."), 400
+    if has_status + has_location + has_time > 1:
+        return jsonify(error="상태·위치·촬영 일시는 따로 바꿔 주세요."), 400
     user_id = g.user["user_id"]
+
+    if has_time:
+        photo_at = _parse_photo_at(data.get("photo_at"))
+        if photo_at is None:
+            return jsonify(error="촬영 일시가 올바르지 않습니다. (1900년 ~ 내일까지)"), 400
+        if not photo_logic.update_photo_at(user_id, pic_id, photo_at):
+            return jsonify(error="일시를 바꿀 수 없는 사진입니다. 휴지통에 있다면 먼저 복구해 주세요."), 404
+        return jsonify(ok=True, photo_at=photo_at.strftime("%Y-%m-%d %H:%M"),
+                       photo_at_full=photo_at.strftime("%Y-%m-%dT%H:%M:%S"), base_dt=photo_at.strftime("%Y%m%d"))
 
     if has_status:
         status = data.get("status")
@@ -165,6 +178,19 @@ def photo_update(pic_id: int):
     row = photo_logic.get_photo(user_id, pic_id)
     j = _photo_json(row) if row else {"lat": None, "lng": None}
     return jsonify(ok=True, lat=j["lat"], lng=j["lng"])
+
+
+def _parse_photo_at(value) -> datetime | None:
+    """'YYYY-MM-DDTHH:MM[:SS]' (datetime-local 입력값) → datetime. 형식이 틀리거나 1900년 전·내일 이후면 None"""
+    if not isinstance(value, str) or not 16 <= len(value) <= 19:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None or not datetime(1900, 1, 1) <= parsed <= datetime.now() + timedelta(days=1):
+        return None
+    return parsed.replace(microsecond=0)
 
 
 @bp.put("/photos/<int:pic_id>/note")

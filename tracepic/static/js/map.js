@@ -656,6 +656,8 @@
   const pv = {
     img: $("pv-img"), prev: $("pv-prev"), next: $("pv-next"), count: $("pv-count"),
     time: $("pv-time"), name: $("pv-name"), loc: $("pv-loc"),
+    when: $("pv-when"), timeEdit: $("pv-time-edit"), timeBox: $("pv-time-box"), timeIn: $("pv-time-in"),
+    timeSave: $("pv-time-save"), timeCancel: $("pv-time-cancel"),
     locEdit: $("pv-loc-edit"), locBox: $("pv-loc-box"), locMapEl: $("pv-loc-map"),
     locSave: $("pv-loc-save"), locCancel: $("pv-loc-cancel"), locClear: $("pv-loc-clear"),
     status: $("pv-status"), statusMsg: $("pv-status-msg"),
@@ -681,11 +683,13 @@
 
   const noteDirty = () => editing && (pv.titleIn.value !== saved.title || pv.note.value !== saved.note);
   const locDirty = () => locPending !== null;
-  const isDirty = () => noteDirty() || locDirty();
+  let timeStart = "";     // 일시 수정 칸을 열 때의 값 (바뀌었는지 비교용)
+  const timeDirty = () => !pv.timeBox.hidden && pv.timeIn.value !== timeStart;
+  const isDirty = () => noteDirty() || locDirty() || timeDirty();
   function confirmDiscard() {
     if (!isDirty()) return true;
-    const what = [noteDirty() && "설명", locDirty() && "위치"].filter(Boolean).join("과 ");
-    return confirm(`저장하지 않은 ${what}${locDirty() ? "가" : "이"} 있습니다. 버릴까요?`);
+    const what = [noteDirty() && "설명", locDirty() && "위치", timeDirty() && "일시"].filter(Boolean).join(", ");
+    return confirm(`저장하지 않은 ${what}이(가) 있습니다. 버릴까요?`);
   }
 
   function openViewer(index) {
@@ -704,6 +708,7 @@
     pv.status.value = p.status;
     showStatusMsg("");
     closeLocEditor();
+    closeTimeEditor();
     renderLoc(p);
     setEditing(false);
     renderDesc(p, null, true);
@@ -860,8 +865,9 @@
       await api(photoUrl(p.pic_id), { method: "PATCH", body: JSON.stringify({ status: next }) });
       p.status = next;
       repaintPhoto(p);
-      if (next === "D") closeLocEditor();
+      if (next === "D") { closeLocEditor(); closeTimeEditor(); }
       renderLoc(p);
+      renderWhen(p);
       const left = !statusFilter().includes(next);
       if (left) stale = true;
       showStatusMsg(
@@ -985,6 +991,53 @@
     }
   }
 
+  // ============================================================
+  // 촬영 일시 수정 (EXIF 가 없어 파일 이름·업로드 시각으로 들어간 사진 바로잡기)
+  // ============================================================
+  function renderWhen(p) {
+    pv.when.textContent = p.photo_at;
+    pv.timeEdit.hidden = p.status === "D" || !pv.timeBox.hidden;   // 휴지통 사진은 복구한 뒤에
+  }
+
+  function openTimeEditor() {
+    const p = photos[cur];
+    // 상세(초까지)를 받았으면 그 값, 아직이면 분까지 값으로 채운다
+    const full = detail && detail.pic_id === p.pic_id && detail.photo_at_full;
+    timeStart = full || p.photo_at.replace(" ", "T");
+    pv.timeIn.value = timeStart;
+    pv.timeBox.hidden = false;
+    renderWhen(p);
+    pv.timeIn.focus();
+  }
+
+  function closeTimeEditor() {
+    pv.timeBox.hidden = true;
+    if (cur >= 0 && photos[cur]) renderWhen(photos[cur]);
+  }
+
+  // 저장 → 화면의 일시만 바로 바꾸고, 촬영 순서·날짜 목록은 창을 닫을 때 다시 조회해 맞춘다(stale)
+  async function saveTime() {
+    const p = photos[cur];
+    const value = pv.timeIn.value;
+    if (!value) { showStatusMsg("일시를 입력해 주세요.", true); return; }
+    for (const b of [pv.timeSave, pv.timeCancel]) b.disabled = true;
+    try {
+      const d = await api(photoUrl(p.pic_id), { method: "PATCH", body: JSON.stringify({ photo_at: value }) });
+      const changed = d.photo_at !== p.photo_at || d.base_dt !== p.base_dt;
+      p.photo_at = d.photo_at;
+      p.base_dt = d.base_dt;
+      if (detail && detail.pic_id === p.pic_id) detail.photo_at_full = d.photo_at_full;
+      stale = true;                           // 순서·날짜가 바뀌었을 수 있다
+      closeTimeEditor();
+      pv.time.textContent = `${p.seq}번째 · ${p.photo_at}`;
+      showStatusMsg(changed ? "일시를 바꿨습니다. 창을 닫으면 촬영 순서가 다시 맞춰집니다." : "일시를 저장했습니다.");
+    } catch (e) {
+      showStatusMsg(`일시를 저장하지 못했습니다: ${e.message}`, true);
+    } finally {
+      for (const b of [pv.timeSave, pv.timeCancel]) b.disabled = false;
+    }
+  }
+
   // ── 닫기 ──
   function closeViewer() {
     if (confirmDiscard()) viewer.close();
@@ -997,6 +1050,12 @@
   pv.edit.addEventListener("click", () => setEditing(true));
   pv.cancel.addEventListener("click", () => {
     if (!noteDirty() || confirm("저장하지 않은 설명이 있습니다. 버릴까요?")) setEditing(false);
+  });
+  pv.timeEdit.addEventListener("click", openTimeEditor);
+  pv.timeCancel.addEventListener("click", closeTimeEditor);
+  pv.timeSave.addEventListener("click", saveTime);
+  pv.timeIn.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); saveTime(); }
   });
   pv.locEdit.addEventListener("click", openLocEditor);
   pv.locCancel.addEventListener("click", closeLocEditor);
@@ -1024,6 +1083,7 @@
   viewer.addEventListener("close", () => {
     editing = false;
     closeLocEditor();
+    closeTimeEditor();
     detailSeq++;
     pv.img.removeAttribute("src");
     const p = photos[cur];

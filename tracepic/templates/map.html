@@ -92,6 +92,16 @@
       </header>
 
       <div class="pv-meta">
+        {# 촬영 일시: 보기 → '일시 수정'을 누르면 입력칸 (EXIF 가 없어 파일 이름·업로드 시각으로 들어간 사진을 바로잡는 용도) #}
+        <div class="pv-loc-row">
+          <span class="muted">일시</span> <span id="pv-when"></span>
+          <button type="button" id="pv-time-edit" class="btn-link">일시 수정</button>
+        </div>
+        <div id="pv-time-box" class="pv-time-box" hidden>
+          <input id="pv-time-in" type="datetime-local" step="1" aria-label="촬영 일시">
+          <button type="button" id="pv-time-cancel" class="btn-small btn-ghost">취소</button>
+          <button type="button" id="pv-time-save" class="btn-small">저장</button>
+        </div>
         <div class="pv-loc-row">
           <span class="muted">위치</span> <span id="pv-loc"></span>
           <button type="button" id="pv-loc-edit" class="btn-link">위치 수정</button>

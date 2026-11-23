@@ -128,7 +128,7 @@
 
   // 성공 결과 설명: 촬영 시각(출처) + 위치 유무
   function describe(data) {
-    const source = { exif: "", meta: "", file: " (파일 수정 시각)", upload: " (업로드 시각)" }[data.time_source] || "";
+    const source = { exif: "", meta: "", filename: " (파일 이름의 날짜)", file: " (파일 수정 시각)", upload: " (업로드 시각)" }[data.time_source] || "";
     const place = data.latitude !== null ? "위치 있음" : "위치 없음";
     const clip = data.kind === "clip" ? "🎞 동영상 3~7초 · " : "";
     return `${clip}${data.photo_at}${source} · ${place}`;
