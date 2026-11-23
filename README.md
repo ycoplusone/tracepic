@@ -378,3 +378,10 @@ curl http://127.0.0.1:5555/health    # {"status":"ok","db":"ok"}
 - `/api/map-photos`: 이미지 주소 3개를 빼고 화면이 pic_id 로 만듦 → 4,926장 기준 응답 1.3MB → 845KB, 서버 변환 171ms → 30ms
 - 지도 화면의 OverType 편집기는 '쓰기'를 처음 누를 때 불러옴(`TPMd.load`, 같은 버전·SRI)
 - 지도·크게 보기·여행기·일기 테스트 재통과
+
+### 28회차 — 모바일 메뉴 접기, 파일 이름으로 촬영일 찾기, 촬영 일시 수정
+- 상단 메뉴: 720px 이하에서 ☰ 버튼으로 접고 펼치기(`static/js/nav.js`, 처음엔 접힘, 바깥 누르기·Esc 로 접힘)
+- 촬영 시각: EXIF(동영상은 메타데이터) → **파일 이름 속 날짜**(`utils/dates.photo_at_from_filename`) → 파일 수정 시각 → 업로드 시각
+  - IMG_/PXL_/KakaoTalk_/Screenshot_/DJI_/VID_/텔레그램·왓츠앱 이름 등. 날짜만 있으면 00:00:00, 없는 날짜·범위 밖·숫자에 붙은 값은 무시. `time_source` = `filename`
+- 크게 보기 '일시 수정': `PATCH /api/photos/<id>` `{"photo_at"}`(1900년~내일, base_dt 도 변경, 휴지통 사진 불가). 상세 응답에 `photo_at_full`(초까지)
+- 테스트: 일시 수정 14항목·파일 이름 날짜 3항목 추가, 날짜에 따라 깨지던 백업 테스트 기간 수정, 전체 재통과

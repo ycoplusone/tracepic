@@ -3,7 +3,7 @@
 
 업로드 흐름 (save_upload)
   1. 이미지 열기·포맷 확인 (utils/image)
-  2. EXIF 에서 촬영 시각·GPS 추출 (utils/exif). 촬영 시각이 없으면 브라우저가 보낸 파일 수정 시각 → 업로드 시각 순으로 대신 쓴다.
+  2. EXIF 에서 촬영 시각·GPS 추출 (utils/exif). 촬영 시각이 없으면 파일 이름 속 날짜(IMG_20250503_142210 등) → 브라우저가 보낸 파일 수정 시각 → 업로드 시각 순으로 대신 쓴다.
   3. 웹용 JPEG(긴 변 IMAGE_MAX_SIDE) + 썸네일(긴 변 400px) + 마커용(128px 정사각형) 만들기 — EXIF 는 파일에 남기지 않는다
   4. 사용자별 키(MASTER_SALT + user_id)로 암호화해 STORAGE_DIR/{사용자폴더}/{base_dt}/{타임스탬프}.enc 로 저장 (utils/crypto)
      타임스탬프(time_ns)는 파일 이름이 겹치지 않게 하는 용도이며 키에는 쓰이지 않는다.
@@ -31,7 +31,7 @@ from pathlib import Path
 
 from flask import current_app
 
-from ..utils import crypto, exif, image, video
+from ..utils import crypto, dates, exif, image, video
 from . import photo_logic
 
 _ENC_SUFFIX = ".enc"
@@ -47,7 +47,7 @@ class UploadResult:
     pic_id: int
     base_dt: str
     photo_at: datetime
-    time_source: str          # 'exif' | 'meta'(동영상) | 'file' | 'upload' — 촬영 시각을 어디서 얻었는지
+    time_source: str          # 'exif' | 'meta'(동영상) | 'filename' | 'file' | 'upload' — 촬영 시각을 어디서 얻었는지
     latitude: float | None
     longitude: float | None
 
@@ -111,6 +111,8 @@ def save_upload(user_id: str, data: bytes, original_file_name: str | None,
 
     # ── 촬영 시각 / 좌표 ──
     photo_at, source = exif.extract_photo_at(img), "exif"
+    if photo_at is None:
+        photo_at, source = dates.photo_at_from_filename(original_file_name), "filename"   # IMG_20250503_142210.jpg 등
     if photo_at is None and client_time is not None:
         photo_at, source = client_time, "file"
     if photo_at is None:
@@ -135,7 +137,7 @@ def save_video_upload(user_id: str, src_path: Path, original_file_name: str | No
     """
     동영상 → 3~7초 구간 움직이는 WebP 3개를 암호화 저장하고 DB 에 등록 (동영상 자체는 저장하지 않음)
     - src_path 는 호출한 쪽이 STORAGE_DIR/.tmp 에 잠깐 쓴 업로드 파일이다. 지우는 것도 호출한 쪽이 한다.
-    - 촬영 시각: 영상 메타데이터 → 브라우저가 보낸 파일 수정 시각 → 업로드 시각. 위치: 영상 메타데이터(없으면 NULL).
+    - 촬영 시각: 영상 메타데이터 → 파일 이름 속 날짜 → 브라우저가 보낸 파일 수정 시각 → 업로드 시각. 위치: 영상 메타데이터(없으면 NULL).
     - 동영상 문제는 video.VideoError 로 알린다 (메시지는 사용자에게 보여 줘도 됨).
     """
     ffmpeg = video.find_ffmpeg(current_app.config["FFMPEG_PATH"] or None)
@@ -144,6 +146,8 @@ def save_video_upload(user_id: str, src_path: Path, original_file_name: str | No
     duration, tags = video.probe(ffmpeg, src_path)
 
     photo_at, source = video.parse_time(tags, tz_minutes), "meta"
+    if photo_at is None:
+        photo_at, source = dates.photo_at_from_filename(original_file_name), "filename"   # VID_20250503_142210.mp4 등
     if photo_at is None and client_time is not None:
         photo_at, source = client_time, "file"
     if photo_at is None:

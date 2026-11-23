@@ -46,6 +46,24 @@ body {
 .topbar-right { display: flex; align-items: center; gap: 12px; }
 .topbar-right form { margin: 0; }
 .who { color: var(--muted); font-size: 14px; }
+/* ☰ 메뉴 버튼 — 좁은 화면에서만 보인다 */
+.nav-toggle {
+  display: none; background: none; border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); font-size: 18px; line-height: 1; width: 38px; height: 34px; cursor: pointer;
+}
+@media (max-width: 720px) {
+  .topbar { flex-wrap: wrap; }
+  .nav-toggle { display: grid; place-items: center; }
+  /* 접힘: 메뉴 숨김 / 펼침: 바 아래 줄에 메뉴를 나란히(넘치면 다음 줄로) */
+  .topbar > .topbar-right { display: none; }
+  .topbar.is-open > .topbar-right {
+    display: flex; flex-wrap: wrap; width: 100%; gap: 6px 16px;
+    padding-top: 10px; margin-top: 2px; border-top: 1px solid var(--border);
+  }
+  .topbar.is-open .nav-link, .topbar.is-open .btn-link { font-size: 15px; padding: 6px 0; }
+  .topbar.is-open .hide-sm { display: inline; }
+  .topbar.is-open .who { display: inline; width: 100%; font-size: 13px; }
+}
 .btn-link { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 14px; padding: 0; }
 
 /* 로그인 화면 */
@@ -296,6 +314,8 @@ body:has(.map-main) { display: flex; flex-direction: column; height: 100dvh; }
 .pv-loc-row { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
 .pv-loc-row .btn-link { margin-left: auto; font-size: 13px; }
 .pv-loc-box { display: flex; flex-direction: column; gap: 6px; }
+.pv-time-box { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pv-time-box input { flex: 1 1 200px; min-width: 0; font: inherit; font-size: 16px; padding: 4px 6px; }  /* 16px: iOS 확대 방지 */
 .pv-loc-help { margin: 0; }
 .pv-loc-map { height: 220px; border-radius: 8px; border: 1px solid var(--border); cursor: crosshair; }
 .loc-pin {

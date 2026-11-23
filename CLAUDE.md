@@ -72,7 +72,7 @@
 - 변환은 ffmpeg로 합니다(`utils/video.py`). `-ss 3 -t 4`를 입력 앞에 둬서 7초 지점까지만 디코딩하고 멈춥니다. 프레임은 PNG로 파이프에 받아 메모리에서 Pillow로 WebP를 만듭니다(프레임을 디스크에 쓰지 않음).
   - ffmpeg 찾는 순서: `.env` `FFMPEG_PATH` → PATH의 `ffmpeg`(서버: `sudo apt install ffmpeg`) → 설치돼 있으면 `imageio-ffmpeg`. 없으면 업로드 화면에서 동영상 안내를 숨기고, 올리면 400입니다.
   - ffmpeg가 파일을 앞뒤로 읽어야 해서 업로드 영상을 `STORAGE_DIR/.tmp`(0700, 파일 0600)에 잠깐 쓰고, 성공·실패와 관계없이 바로 지웁니다. 다만 Flask가 큰 업로드를 시스템 임시 폴더에 먼저 받아 두는 것은 막지 않습니다(0600).
-- 촬영 시각: 영상 메타데이터 → 브라우저가 보낸 파일 수정 시각 → 업로드 시각. `com.apple.quicktime.creationdate`(시간대 포함)는 그 현지 시각 그대로, `creation_time`(UTC, 안드로이드·DJI)은 업로드한 브라우저의 시간대(`tz_offset`, 동쪽 +분)로 바꿉니다. 시간대를 모르면 UTC 값을 쓰지 않습니다.
+- 촬영 시각: 영상 메타데이터 → 파일 이름 속 날짜(`VID_20250503_142210.mp4` 등) → 브라우저가 보낸 파일 수정 시각 → 업로드 시각. `com.apple.quicktime.creationdate`(시간대 포함)는 그 현지 시각 그대로, `creation_time`(UTC, 안드로이드·DJI)은 업로드한 브라우저의 시간대(`tz_offset`, 동쪽 +분)로 바꿉니다. 시간대를 모르면 UTC 값을 쓰지 않습니다.
 - 위치: `com.apple.quicktime.location.ISO6709` / `location` / `location-eng`(ISO 6709). DJI Osmo는 대개 GPS가 없어 위치 없음으로 들어옵니다(크게 보기에서 직접 찍기).
 - 크기 한도: 사진 `MAX_UPLOAD_MB`(30), 동영상 `MAX_VIDEO_MB`(500). `MAX_CONTENT_LENGTH`는 둘 중 큰 값 + 1MB입니다. **Nginx `client_max_body_size`도 500M 이상**이어야 하고, 변환에 수십 초가 걸릴 수 있으니 `proxy_read_timeout`·gunicorn `--timeout`을 넉넉히(300초) 둡니다.
 - HDR·10bit·D-Log 영상은 색 변환(톤매핑)을 하지 않아 색이 흐리게 나올 수 있습니다.
@@ -117,7 +117,8 @@
   - 사용자 폴더는 아이디가 `[A-Za-z0-9_.-]`일 때만 그대로 쓰고, 아니면 sha256 앞 16자리를 씁니다(경로 조작 방지).
   - 원본은 보관하지 않습니다. 웹용 JPEG(긴 변 `IMAGE_MAX_SIDE`), 썸네일, 마커용만 저장하고, 파일에서는 EXIF(GPS 포함)를 지웁니다. 좌표는 DB에만 있습니다.
   - JPEG는 `open_image(max_side=...)`가 draft로 필요한 크기만큼만 디코딩합니다. 세 크기는 `normalize()`(회전·RGB 정리)를 한 번 거친 이미지로 만듭니다.
-  - 촬영 시각은 EXIF → 브라우저가 보낸 파일 수정 시각 → 업로드 시각 순서로 정합니다. EXIF 시각은 시간대를 바꾸지 않고 현지 시각 그대로 씁니다.
+  - 촬영 시각은 EXIF → **파일 이름 속 날짜**(`utils/dates.photo_at_from_filename`, 2026-11-23 사용자 결정) → 브라우저가 보낸 파일 수정 시각 → 업로드 시각 순서로 정합니다. EXIF 시각은 시간대를 바꾸지 않고 현지 시각 그대로 씁니다.
+    - 이름 예: `IMG_20250503_142210`, `PXL_…_142210123`(밀리초), `KakaoTalk_…`, `Screenshot_20250503-142210`, `DJI_20250503142210_0001`, `photo_2025-05-03_14-22-10`, `IMG-20250503-WA0001`(날짜만 → 00:00:00). 앞뒤가 숫자에 붙은 날짜, 없는 날짜, 1990년 전·내일 이후는 무시합니다. `time_source`는 `filename`입니다.
   - 파일은 0600, 폴더는 0700 권한으로 만듭니다. `MASTER_SALT`가 비어 있으면 암호화를 거부합니다.
 - 외부 스크립트(Leaflet 등)는 **버전을 고정하고 SRI(`integrity`)를 붙여서** 불러옵니다. 버전을 올릴 때는 해시도 다시 계산합니다.
 - 지도 타일은 OpenStreetMap 공용 서버를 씁니다(개인 사용 규모 기준). 사용량이 늘면 타일 제공자를 바꿔야 합니다.
@@ -161,6 +162,9 @@
 - SQL은 조건에 따라 문자열을 조립하지 않고 완성된 리터럴로 씁니다. `IN %s`에는 튜플을 바인딩합니다.
 - base_dt 검증과 변환은 `utils/dates.py`(`validate_base_dt`, `to_base_dt`)를 씁니다.
 
+## 공통 화면
+- 상단 메뉴: 720px 이하에서는 ☰ 버튼으로 접고 펼칩니다(`static/js/nav.js`, `.topbar.is-open`). 처음엔 접혀 있고, 메뉴 바깥을 누르거나 Esc를 누르면 접힙니다.
+
 ## 지도 화면 규칙 (`/`)
 - 조회 조건: 기간(기본 **이번 달 1일 ~ 오늘**, 브라우저 현지 날짜) + 상태(`?status=A,B,C`, 기본은 A/B/C). 상태 조건 검증은 `photo_logic.check_status_filter`가 하고, Z(완전삭제)는 고를 수 없습니다.
 - 날짜 목록은 조회 기간 안에서 사진이 있는 날을 **일자별(오름차순)**로 보여 줍니다(`/api/photo-dates?start=&end=`). 날짜를 누르면 그날만 지도에 표시하고, 조회 기간은 그대로 둡니다. '기간 전체'나 같은 날을 다시 누르면 기간 전체로 돌아갑니다. '전체' 버튼은 사진이 있는 첫날~마지막 날로 기간을 넓힙니다.
@@ -174,6 +178,8 @@
   - 타일은 `keepBuffer: 1`, `updateWhenIdle: true`. OverType는 지도 화면에서 '쓰기'를 처음 누를 때 `TPMd.load()`로 불러옵니다(같은 버전·SRI, `mdedit.js`에 상수).
 - 필름 키보드: Tab 정지점은 선택된 사진 하나뿐이고(roving tabindex, `syncTabStop`), 필름 안에서는 ← → / Home / End로 옮기며 Enter로 크게 봅니다. 방향키 이동은 위치 없는 사진이어도 크게 보기를 열지 않습니다(클릭만 바로 엽니다). 포커스가 아무 데도 없을 때(body)도 ← →가 필름을 넘기고, 입력칸·Leaflet 지도에 포커스가 있으면 그쪽에 맡깁니다.
 - 위치 찍기·수정: 크게 보기의 작은 지도(`#pv-loc-map`, 처음 열 때 생성)에서 누르거나 핀을 끌어 정하고 `PATCH /api/photos/<id>` `{"latitude","longitude"}`(둘 다 null = 지우기) → `photo_logic.update_location`으로 저장합니다. 상태와 위치는 한 요청에 같이 보내지 않습니다. 휴지통(D) 사진은 바꿀 수 없습니다. 저장 뒤에는 다시 조회하지 않고 `draw(photos, true)`로 그립니다.
+- 촬영 일시 수정(2026-11-23): 크게 보기의 '일시 수정' → `PATCH /api/photos/<id>` `{"photo_at": "YYYY-MM-DDTHH:MM[:SS]"}`(현지 시각, 1900년~내일) → `photo_logic.update_photo_at`(base_dt도 함께). 휴지통(D) 사진은 안 됩니다. 저장 파일 경로의 날짜 폴더는 그대로 둡니다(경로는 저장 위치일 뿐). 저장 뒤 창을 닫으면 다시 조회해 순서·날짜 목록을 맞춥니다(`stale`). 상세 응답의 `photo_at_full`(초까지)로 입력칸을 채웁니다.
+- 상태·위치·일시는 한 요청에 하나만 보냅니다.
 - 상태 변경은 `PATCH /api/photos/<id>` → `photo_logic.change_status`(A/B/C/D 사이 자유 이동, D→A/B/C가 복구)를 씁니다. 완전삭제(Z)는 파일 삭제가 함께 필요하므로 이 경로로는 할 수 없습니다.
 - 사진 설명은 화면에서 **사진당 1건**(`tracepic_notes`에서 가장 먼저 쓴 사용 중인 기록)으로 다룹니다. 테이블은 여러 건을 허용하므로 나머지 기록은 지우지 않고 그대로 둡니다.
 - 휴지통(D) 사진은 크게 보기는 되지만 설명은 숨기고 쓸 수도 없습니다. 복구하면 다시 보입니다.

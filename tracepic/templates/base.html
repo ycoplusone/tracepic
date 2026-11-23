@@ -11,10 +11,13 @@
 </head>
 <body>
   {% if g.user %}
-  <!-- 로그인 상태일 때만 상단 바 표시 -->
+  <!-- 로그인 상태일 때만 상단 바 표시. 좁은 화면(720px 이하)에서는 메뉴를 ☰ 버튼으로 접고 펼친다 (static/js/nav.js) -->
   <header class="topbar">
     <a class="brand" href="{{ url_for('main.index') }}">TracePic</a>
-    <div class="topbar-right">
+    <button type="button" id="nav-toggle" class="nav-toggle" aria-expanded="false" aria-controls="topnav" aria-label="메뉴 펼치기">
+      <span aria-hidden="true">☰</span>
+    </button>
+    <nav id="topnav" class="topbar-right" aria-label="메뉴">
       <a class="nav-link" href="{{ url_for('main.index') }}">지도</a>
       <a class="nav-link" href="{{ url_for('diary.index') }}">일기</a>
       <a class="nav-link" href="{{ url_for('main.story') }}">여행기</a>
@@ -26,8 +29,9 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn-link">로그아웃</button>
       </form>
-    </div>
+    </nav>
   </header>
+  <script src="{{ url_for('static', filename='js/nav.js') }}" defer></script>
   {% endif %}
 
   <main class="{% block main_class %}container{% endblock %}">
